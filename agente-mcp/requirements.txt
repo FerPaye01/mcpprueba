@@ -1,0 +1,6 @@
+chainlit
+mcp
+openai
+python-dotenv
+requests
+pandas
