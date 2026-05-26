@@ -1,6 +1,6 @@
 # Guía de Configuración: Cloudflare Tunnel para el Servidor MCP
 
-Esta guía explica paso a paso cómo exponer tu **Servidor MCP privado** (que corre en el puerto `8001` de la máquina interna `10.10.17.216`) hacia Internet usando **Cloudflare Tunnel**, de modo que tu aplicación en **Railway** pueda comunicarse con él.
+Esta guía explica paso a paso cómo exponer tu **Servidor MCP privado** (que corre en el puerto `x` de la máquina interna `y`) hacia Internet usando **Cloudflare Tunnel**, de modo que tu aplicación en **Railway** pueda comunicarse con él.
 
 ---
 
@@ -8,7 +8,7 @@ Esta guía explica paso a paso cómo exponer tu **Servidor MCP privado** (que co
 *Ideal para pruebas inmediatas y demos. No requiere cuenta de Cloudflare ni dominio propio. Genera una URL pública aleatoria.*
 
 ### Paso 1: Descargar `cloudflared`
-En la máquina donde corre el servidor MCP (`10.10.17.216`):
+En la máquina donde corre el servidor MCP (``):
 
 1. **Windows** (PowerShell como Administrador):
    Instala `cloudflared` usando winget o descárgalo manualmente:
@@ -32,7 +32,7 @@ Ejecuta la siguiente línea de comando apuntando al puerto de tu servidor MCP (`
 cloudflared tunnel --url http://localhost:8001
 ```
 
-*(Si el servidor MCP corre en la misma máquina. Si corre en otra máquina de la misma red local, cambia `localhost` por la IP `10.10.17.216`)*
+*(Si el servidor MCP corre en la misma máquina. Si corre en otra máquina de la misma red local, cambia `localhost` por la IP ``)*
 
 ### Paso 3: Obtener la URL y configurar tu App
 Al ejecutar el comando, verás un bloque de logs similar a este en la terminal:
@@ -79,7 +79,7 @@ En el mismo asistente de Cloudflare Zero Trust:
    * **Subdomain**: `mcp-api` (o el que gustes).
    * **Domain**: Selecciona tu dominio registrado (ej. `midominio.com`).
    * **Service Type**: `HTTP` (o `HTTPS` si el servidor MCP ya usa SSL).
-   * **URL**: `localhost:8001` (o `10.10.17.216:8001`).
+   * **URL**: `localhost:y` (o `x:y`).
 3. Guarda la configuración.
 
 ### Paso 4: Actualizar la Configuración de tu App

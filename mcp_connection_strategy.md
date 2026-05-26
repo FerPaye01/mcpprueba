@@ -34,7 +34,7 @@ graph TD
 En lugar de desplegar Chainlit en Railway (nube pública), se hospeda tanto el backend del MCP como el frontend de Chainlit en la misma red privada de Osinergmin.
 
 * **Cómo funciona**:
-  1. Se despliega la carpeta `agente-mcp` en el mismo servidor (`10.10.17.216`) o en otra máquina virtual de la intranet corporativa.
+  1. Se despliega la carpeta `agente-mcp` en el mismo servidor () o en otra máquina virtual de la intranet corporativa.
   2. Se ejecuta Chainlit apuntando localmente a `localhost:8001` (o la IP privada).
   3. El equipo de TI/Redes mapea un nombre DNS interno (ej. `http://asistente-mcp.osinergmin.gob.pe`) apuntando al puerto `8080` de esa máquina.
 * **Ventajas**:

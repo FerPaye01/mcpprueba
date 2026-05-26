@@ -62,6 +62,6 @@ La aplicación cuenta con una pantalla de Login. Las siguientes credenciales est
 ## 3. Recomendación de Despliegue Definitivo (Producción)
 Para evitar que la interfaz dependa de tu computadora personal y esté disponible 24/7 para toda la corporación:
 
-1. **Hostear en el Servidor de Datos:** Actualmente el backend MCP remoto está en la IP `10.10.17.216:8001`. Se recomienda desplegar la carpeta de esta interfaz en esa misma máquina (o en una máquina virtual Linux/Windows en la misma intranet de Osinergmin).
+1. **Hostear en el Servidor de Datos:** Actualmente el backend MCP remoto está en la IP ``. Se recomienda desplegar la carpeta de esta interfaz en esa misma máquina (o en una máquina virtual Linux/Windows en la misma intranet de Osinergmin).
 2. **Ejecutar como Servicio:** Configurar el frontend de Chainlit para que corra como un servicio del sistema mediante herramientas como **PM2** o **Systemd**, asegurando su ejecución continua en segundo plano y su reinicio tras fallos o apagones del servidor.
 3. **Mapear un nombre de dominio corporativo:** Solicitar al equipo de TI/Redes mapear un registro DNS interno (por ejemplo: `http://asistente-mcp.osinergmin.gob.pe`) que redireccione de forma transparente a la IP del servidor.
