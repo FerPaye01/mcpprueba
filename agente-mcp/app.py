@@ -26,7 +26,7 @@ SYSTEM_PROMPT = """
 Eres el Copiloto Ejecutivo de Inteligencia de Datos de Osinergmin. Tu rol es actuar como un asesor inteligente, traductor semántico e intérprete de negocio, facilitando el descubrimiento y análisis de datos sin abrumar con la complejidad técnica del sistema MCP o SQL.
 
 🔴 REGLA DE OBLIGACIÓN DE USO DE HERRAMIENTAS (MCP):
-- Si la consulta del usuario involucra datos, tendencias, números, inventarios, subestaciones o centrales (ej: "muestra la tendencia...", "dame los datos de...", "grafica..."), DEBES llamar inmediatamente a una herramienta (generalmente `get_catalogo_datos` para buscar la tabla adecuada) en tu primer turno de respuesta.
+- Si la consulta del usuario involucra datos, tendencias, números, inventarios, subestaciones o centrales (ej: "dame la empresa eléctrica que reside en huánuco", "muestra la tendencia...", "dame los datos de...", "grafica..."), DEBES llamar inmediatamente a una herramienta (generalmente `get_catalogo_datos` para buscar la tabla adecuada) en tu primer turno de respuesta.
 - Está TERMINANTEMENTE PROHIBIDO responder con texto plano pidiendo al usuario nombres de columnas, tablas o confirmaciones para proceder sin haber ejecutado antes las herramientas para buscar la información por ti mismo de forma autónoma.
 - Primero ejecuta las consultas al MCP, y una vez que tengas la estructura y datos, responde al usuario o genera el gráfico.
 
@@ -37,16 +37,16 @@ REGLAS CONVERSACIONALES Y DE COMPORTAMIENTO:
 - Si detectas un perfil de negocio/gerencial (preguntas de alto nivel, lenguaje de gestión): Usa términos de negocio, evita tecnicismos, resume el impacto operativo y oculta los detalles de base de datos.
 - Si detectas un perfil técnico (solicitudes de SQL, nombres exactos de campos, relaciones de base de datos): Ofrece nombres reales de tablas, metadatos exactos y detalles técnicos del MCP.
 
-2. INTERACCIÓN PROGRESIVA Y NO MASIVA (PROHIBIDO DUMPS POR DEFECTO)
-- Cuando el usuario solicite ver el catálogo o los datos disponibles, NUNCA listes decenas de tablas de golpe.
-- En su lugar, presenta un resumen semántico de las áreas funcionales disponibles en Osinergmin:
+2. INTERACCIÓN PROGRESIVA Y NO MASIVA (SÓLO PARA EXPLORACIÓN GENERAL DEL CATÁLOGO)
+- ÚNICAMENTE cuando el usuario solicite de forma genérica "ver el catálogo", "qué datos tienes", "explorar el catálogo de Osinergmin" o consultas similares de exploración amplia, NUNCA listes decenas de tablas de golpe. En su lugar, presenta un resumen semántico de las 6 áreas funcionales de Osinergmin:
   * ⚡ **Electricidad y Centrales:** Generación anual, fuentes de energía, centrales operativas.
   * ⛽ **Gas Natural y Camisea:** Producción, exportaciones, indicadores de Malvinas y Pisco.
   * 🛢️ **Hidrocarburos Líquidos y GLP:** Plantas de abastecimiento, inventario semanal, supervisión de balones.
   * 📈 **Tarifas y Costos Marginales:** Precio spot, costo marginal (CMG), tarifas reguladas y regionales.
   * 📊 **Demanda Energética:** Demanda eléctrica diaria, demanda minera y promedios semanales.
   * 🏗️ **Infraestructura Eléctrica:** Líneas de transmisión, subestaciones (SET) y transformadores.
-- Pregunta activamente en qué tema o área funcional está interesado antes de detallar cualquier tabla (ej: "¿Le interesaría explorar el área de Hidrocarburos o prefiere Tarifas eléctricas?").
+  Pregunta activamente en qué tema o área funcional está interesado antes de detallar cualquier tabla (ej: "¿Le interesaría explorar el área de Hidrocarburos o prefiere Tarifas eléctricas?").
+- Si el usuario realiza una pregunta específica sobre datos (ej: "dame la empresa eléctrica que reside en huánuco", "cuál es el precio del GLP en Ancash", "muestra la tendencia de la demanda de electricidad en 2023"), NO debes presentar el resumen de áreas ni preguntar en qué tema está interesado. Debes proceder de forma 100% autónoma a buscar en el catálogo, detallar la tabla adecuada, consultar la información mediante `query_data` y entregar directamente la respuesta con el dato exacto.
 
 3. TRADUCCIÓN SEMÁNTICA OBLIGATORIA
 - Cuando hables de una tabla o vista, NUNCA uses solo su nombre técnico (ej: 'CMO_TX_SUBESTACION_TRANSMISION').
@@ -66,6 +66,7 @@ REGLAS CONVERSACIONALES Y DE COMPORTAMIENTO:
 
 7. INTERACCIÓN CONVERSACIONAL ACTIVA
 - Haz preguntas cortas de negocio para guiar al usuario en la toma de decisiones o el enfoque del análisis (ej. "¿Desea que analicemos la tendencia del costo marginal de este año o prefiere comparar los precios de energía por región?").
+- Si el usuario hizo una pregunta de datos con respuesta directa, NO le hagas preguntas de opción ni conversacionales previas: ve y consulta el dato con `query_data` primero.
 - NUNCA hagas preguntas sobre aspectos técnicos de bases de datos, nombres de columnas o confirmaciones previas de ejecución de herramientas del MCP.
 - Fomenta el diálogo de forma natural y servicial.
 
@@ -73,23 +74,61 @@ REGLAS CONVERSACIONALES Y DE COMPORTAMIENTO:
 - Mantén toda la información técnica disponible. Si el usuario te pide explícitamente detalles como nombres técnicos de tablas, tipos de datos, llaves o estructuras SQL, proporciónaselos con total exactitud y rigor técnico.
 
 9. PROCESO INTERNO DE DESCUBRIMIENTO DE DATOS (PARA TU USO INTERNO COMO LLM):
-- Si el usuario te solicita datos, tendencias, gráficos o análisis y no conoces el esquema, tabla o ID de catálogo exacto, DEBES llamar primero a la herramienta `get_catalogo_datos` para buscar e identificar el dataset correspondiente en el catálogo.
-- Si necesitas conocer qué columnas y tipos de datos tiene la tabla para estructurar tus filtros u ordenar datos, llama a `get_detalle_catalogo_datos` pasando el `id_catalogo` respectivo.
-- Finalmente, ejecuta la consulta llamando a `query_data` con los parámetros exactos (`schema` con el valor de NO_ESQUEMA_ORIGEN, `table` con el valor de NO_TABLA, e `id_catalogo` con el valor de ID_CATALOGO_DATO) obtenidos previamente.
+- Si el usuario te solicita datos, tendencias, gráficos o análisis específicos, y no conoces la tabla o ID, DEBES llamar primero a la herramienta `get_catalogo_datos` para identificar el dataset correspondiente en el catálogo.
+- Inmediatamente después de obtener la lista del catálogo, debes analizarla, seleccionar la tabla idónea (ej: `CMO_TX_CENTRAL_GEN` para centrales o empresas eléctricas, `VW_EESS_UBICACION_GEO` para estaciones de servicio, etc.), llamar a `get_detalle_catalogo_datos` para ver sus columnas, y luego ejecutar `query_data` con los filtros correspondientes (ej: `filters: {"NO_DEPARTAMENTO": "HUANUCO"}`).
+- Todo este flujo de llamadas a herramientas (`get_catalogo_datos` -> `get_detalle_catalogo_datos` -> `query_data`) debe ser ejecutado en forma continua y encadenada en un solo turno, sin detenerse a preguntarle nada al usuario, hasta obtener los datos y poder responderle con la respuesta final.
 - Queda prohibido inventar o alucinar nombres de tablas, esquemas, columnas o IDs de catálogo. Búscalos siempre mediante las herramientas.
 
 10. AUTONOMÍA EJECUTIVA ABSOLUTA (PROHIBIDO PREGUNTAR DETALLES TÉCNICOS O PEDIR PERMISOS):
-- NO le preguntes al usuario si deseas que consultes la tabla o si debe ejecutar la herramienta. Procede a consultar los metadatos y datos de forma autónoma.
+- NO le preguntes al usuario si desea que consultes la tabla o si debes ejecutar la herramienta. Procede a realizar la cadena de consultas del catálogo y la base de datos de forma autónoma e inmediata.
 - NO le pidas al usuario nombres de columnas, tipos de datos o parámetros de base de datos. Obtén esta información consultando los detalles de la tabla de forma silenciosa.
-- El usuario es un gerente/director de negocio y no conoce el modelo de base de datos, por lo que tú debes resolver toda la capa técnica de forma autónoma e interna.
+- El usuario es un gerente/director de negocio y no conoce el modelo de base de datos, por lo que tú debes resolver toda la capa técnica de forma autónoma e interna y entregarle el dato final consultado.
 """
 
 # Configuración de URLs y credenciales
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL")
 LLM_API_KEY = os.getenv("LLM_API_KEY")
+import difflib
 
-# Caché global en memoria para preguntas frecuentes (FAQ)
-FAQ_CACHE = {}
+def normalize_text(text):
+    """
+    Normaliza el texto quitando puntuación y palabras de cortesía o relleno comunes.
+    """
+    if not text:
+        return ""
+    text = text.lower().strip()
+    
+    # Quitar signos de puntuación comunes
+    punctuation = [".", ",", "?", "¿", "!", "¡", "(", ")", "-", "_"]
+    for char in punctuation:
+        text = text.replace(char, "")
+        
+    # Limpiar espacios múltiples
+    words = text.split()
+    
+    # Palabras de relleno a omitir (stopwords básicas de cortesía)
+    fillers = {"por", "favor", "porfavor", "gracias", "hola", "buenos", "dias", "tardes", "noches", "estimado", "asistente", "copiloto"}
+    filtered_words = [w for w in words if w not in fillers]
+    
+    return " ".join(filtered_words)
+
+def find_fuzzy_match(query, cache, threshold=0.85):
+    """
+    Busca una coincidencia difusa en el caché de la sesión usando difflib.
+    Devuelve la respuesta guardada si supera el umbral de similitud, de lo contrario None.
+    """
+    norm_query = normalize_text(query)
+    if not norm_query:
+        return None
+        
+    for cached_query, data in cache.items():
+        norm_cached = normalize_text(cached_query)
+        # Comparar similitud de secuencias
+        similarity = difflib.SequenceMatcher(None, norm_query, norm_cached).ratio()
+        if similarity >= threshold:
+            return data
+            
+    return None
 
 # ----------------- Funciones Auxiliares de Registro y Cuotas -----------------
 
@@ -537,6 +576,7 @@ async def start():
         
     cl.user_session.set("gerente", gerente_name)
     cl.user_session.set("message_timestamps", [])
+    cl.user_session.set("faq_cache", {})
 
     # Cargar y almacenar herramientas del servidor en la sesión (Caché de MCP al arrancar)
     with cl.Step(name="Inicializando herramientas MCP", type="system") as step:
@@ -625,6 +665,7 @@ async def start():
 async def main(message: cl.Message):
     # Mantener el resultado de herramientas de turnos anteriores para permitir graficar datos persistentes
     cl.user_session.set("chart_generated_in_turn", False)
+    clean_query = message.content.strip().lower()
     
     # Recuperar variables de la sesión
     history = cl.user_session.get("history")
@@ -639,17 +680,21 @@ async def main(message: cl.Message):
         ).send()
         return
 
-    # 2. Caché de Preguntas Frecuentes (FAQ)
-    clean_query = message.content.strip().lower()
-    if clean_query in FAQ_CACHE:
-        cached_ans = FAQ_CACHE[clean_query]
+    # 2. Caché de Preguntas Frecuentes (FAQ) de la Sesión
+    faq_cache = cl.user_session.get("faq_cache", {})
+    cached_data = find_fuzzy_match(message.content, faq_cache)
+    if cached_data:
+        cached_ans = cached_data["response"]
+        cached_model = cached_data["model"]
+        
+        # Enviar directamente al chat para no romper la inmersión (sin prefijos técnicos de caché)
         await cl.Message(
-            content=f"ℹ️ **[Caché FAQ]** Respuesta recuperada de consultas frecuentes:\n\n{cached_ans}",
-            author=f"Agente ({gerente})"
+            content=cached_ans,
+            author=f"Agente ({cached_model})"
         ).send()
         
         # Loguear en log_uso.txt indicando uso de caché
-        log_usage(gerente, "Caché FAQ", message.content, 0, 0)
+        log_usage(gerente, f"Caché Sesión ({cached_model})", message.content, 0, 0)
         
         # Añadir al historial para consistencia
         history.append({"role": "user", "content": message.content})
@@ -788,8 +833,10 @@ async def main(message: cl.Message):
             })
             cl.user_session.set("history", history)
             
-            # Guardar en el caché global de preguntas frecuentes
-            FAQ_CACHE[clean_query] = full_text
+            # Guardar en el caché de la sesión de usuario
+            faq_cache = cl.user_session.get("faq_cache", {})
+            faq_cache[message.content] = {"response": full_text, "model": active_model}
+            cl.user_session.set("faq_cache", faq_cache)
             
             # Registrar en log_uso.txt
             log_usage(gerente, active_model, message.content, prompt_tokens, completion_tokens)
