@@ -1,0 +1,33 @@
+/* Osinergmin Theme for Chainlit */
+
+:root {
+  --primary-color: #00559E;
+  --accent-color: #00B6F1;
+}
+
+/* Header customization */
+#header {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+}
+
+/* Button customization */
+.cl-button-primary {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+
+.cl-button-primary:hover {
+  background-color: var(--accent-color) !important;
+}
+
+/* User message background (optional) */
+.cl-user-message {
+  border-left: 4px solid var(--accent-color) !important;
+}
+
+/* Assistant name color */
+.cl-assistant-name {
+  color: var(--primary-color) !important;
+  font-weight: bold;
+}
