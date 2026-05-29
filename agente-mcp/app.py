@@ -654,10 +654,65 @@ async def start():
         {"role": "system", "content": personalized_system_prompt}
     ])
     
+    # Configuración de Filtros (Refinar Resultados [RF-07])
+    await cl.ChatSettings(
+        [
+            cl.input_widget.Select(
+                id="ubicacion",
+                label="Ubicación",
+                values=["Todas", "Amazonas", "Ancash", "Apurímac", "Arequipa", "Ayacucho", "Cajamarca", "Callao", "Cusco", "Huancavelica", "Huánuco", "Ica", "Junín", "La Libertad", "Lambayeque", "Lima", "Loreto", "Madre de Dios", "Moquegua", "Pasco", "Piura", "Puno", "San Martín", "Tacna", "Tumbes", "Ucayali"],
+                initial_index=18, # Moquegua
+            ),
+            cl.input_widget.Select(
+                id="periodo",
+                label="Periodo",
+                values=["Todos", "AÑO: 2024", "AÑO: 2023", "AÑO: 2022", "AÑO: 2021"],
+                initial_index=2, # AÑO: 2023
+            ),
+            cl.input_widget.Tags(
+                id="categoria",
+                label="Categoría",
+                initial=["Solar"],
+            ),
+            cl.input_widget.Tags(
+                id="entidad",
+                label="Entidad",
+                initial=["MINEM"],
+            ),
+            cl.input_widget.Tags(
+                id="variable",
+                label="Variable",
+                initial=["Generación (MWh)"],
+            )
+        ]
+    ).send()
+
     # Mensaje estético de bienvenida
     await cl.Message(
         content=f"💼 Bienvenido **{gerente_name}**, soy su asistente ejecutivo de inteligencia de datos en Osinergmin. "
-                "Estoy listo para asistirte con tus consultas en lenguaje natural sobre nuestros datos gobernados.",
+                "Estoy listo para asistirte con tus consultas en lenguaje natural sobre nuestros datos gobernados.\n\n"
+                "⚙️ *Puedes usar el botón de ajustes (Settings) para refinar tus resultados de búsqueda por ubicación, periodo y más.*",
+        author="Sistema"
+    ).send()
+
+@cl.on_settings_update
+async def setup_agent(settings):
+    # Guardamos los filtros en la sesión para poder inyectarlos en el prompt del sistema o pasarlos al backend
+    cl.user_session.set("filtros_activos", settings)
+    
+    ubicacion = settings.get("ubicacion")
+    periodo = settings.get("periodo")
+    categoria = ", ".join(settings.get("categoria", []))
+    entidad = ", ".join(settings.get("entidad", []))
+    
+    mensaje_filtros = f"✅ **Filtros Actualizados:**\n- Ubicación: {ubicacion}\n- Periodo: {periodo}"
+    if categoria:
+        mensaje_filtros += f"\n- Categoría: {categoria}"
+    if entidad:
+        mensaje_filtros += f"\n- Entidad: {entidad}"
+        
+    await cl.Message(
+        content=mensaje_filtros,
         author="Sistema"
     ).send()
 

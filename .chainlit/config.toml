@@ -124,7 +124,7 @@ cot = "full"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
-custom_css = "/public/osinergmin.css"
+custom_css = "/public/osinergmin_v2.css"
 
 # Specify additional attributes for a custom CSS file
 # custom_css_attributes = "media=\"print\""
@@ -153,7 +153,7 @@ alert_style = "classic"
 # custom_meta_image_url = "https://chainlit-cloud.s3.eu-west-3.amazonaws.com/logo/chainlit_banner.png"
 
 # Load assistant logo directly from URL.
-logo_file_url = ""
+logo_file_url = "/public/logo.png"
 
 # Load assistant avatar image directly from URL.
 default_avatar_file_url = ""
@@ -173,6 +173,18 @@ default_avatar_file_url = ""
 #     icon_url = "https://avatars.githubusercontent.com/u/128686189?s=200&v=4"
 #     url = "https://github.com/Chainlit/chainlit/issues"
 #     target = "_blank" (default)  # Optional: "_self", "_parent", "_top".
+
+[UI.theme]
+default = "light"
+[UI.theme.light.primary]
+main = "#0039AA"
+dark = "#002B80"
+light = "#03A9F4"
+
+[UI.theme.dark.primary]
+main = "#0039AA"
+dark = "#002B80"
+light = "#03A9F4"
 
 [meta]
 generated_by = "2.11.1"

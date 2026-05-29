@@ -9,29 +9,29 @@
   --orange: #F6A229;
   --white: #F2F2F2;
   --mostaza: #BFAB49;
-
+  
   --primary-color: var(--primary-blue);
   --accent-color: var(--secondary-light-blue);
 }
 
 /* Header customization */
-#header, .cl-header, header.MuiAppBar-root {
+.cl-header {
   background-color: var(--primary-color) !important;
   color: white !important;
 }
 
 /* Button customization */
-.cl-button-primary, button.MuiButton-containedPrimary {
+.cl-button-primary {
   background-color: var(--primary-color) !important;
   border-color: var(--primary-color) !important;
 }
 
-.cl-button-primary:hover, button.MuiButton-containedPrimary:hover {
+.cl-button-primary:hover {
   background-color: var(--accent-color) !important;
 }
 
 /* Assistant name color */
-.cl-assistant-name, .MuiTypography-root.step-name {
+.cl-assistant-name {
   color: var(--primary-color) !important;
   font-weight: bold;
 }

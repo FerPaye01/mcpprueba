@@ -1,8 +1,17 @@
 /* Osinergmin Theme for Chainlit */
 
 :root {
-  --primary-color: #00559E;
-  --accent-color: #00B6F1;
+  --primary-blue: #0039AA;
+  --secondary-light-blue: #03A9F4;
+  --yellow: #FBE122;
+  --green: #35CC29;
+  --sky-blue: #D2F7FC;
+  --orange: #F6A229;
+  --white: #F2F2F2;
+  --mostaza: #BFAB49;
+  
+  --primary-color: var(--primary-blue);
+  --accent-color: var(--secondary-light-blue);
 }
 
 /* Header customization */
