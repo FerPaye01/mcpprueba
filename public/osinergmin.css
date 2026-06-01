@@ -1,37 +1,46 @@
-/* Osinergmin Theme for Chainlit */
+/* ==========================================================================
+   OSINERGMIN THEME - MODERN DASHBOARD LOOK
+   ========================================================================== */
 
-:root {
-  --primary-blue: #0039AA;
-  --secondary-light-blue: #03A9F4;
-  --yellow: #FBE122;
-  --green: #35CC29;
-  --sky-blue: #D2F7FC;
-  --orange: #F6A229;
-  --white: #F2F2F2;
-  --mostaza: #BFAB49;
-
-  --primary-color: var(--primary-blue);
-  --accent-color: var(--secondary-light-blue);
+/* 1. Fondo general de la aplicación (Color sutil, no blanco puro) */
+body {
+    background-color: #F8FAFC;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* Header customization */
-#header, .cl-header, header.MuiAppBar-root {
-  background-color: var(--primary-color) !important;
-  color: white !important;
+/* 2. Estilo de los mensajes del "Agente" para que parezcan Tarjetas/Widgets */
+.message-bot {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+    padding: 20px !important;
+    margin-bottom: 20px !important;
+    max-width: 90% !important; /* Más ancho para que respiren los gráficos */
 }
 
-/* Button customization */
-.cl-button-primary, button.MuiButton-containedPrimary {
-  background-color: var(--primary-color) !important;
-  border-color: var(--primary-color) !important;
+/* 3. Estilo de los elementos interactivos (Gráficos, Tablas) */
+/* Queremos que el gráfico Plotly encaje perfectamente sin bordes dobles */
+.plotly-graph-div {
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 15px;
 }
 
-.cl-button-primary:hover, button.MuiButton-containedPrimary:hover {
-  background-color: var(--accent-color) !important;
+/* 4. Títulos dentro de las respuestas (H3, H4) para look ejecutivo */
+.message-bot h3, .message-bot h4 {
+    color: #0F172A;
+    font-weight: 600;
+    margin-top: 0;
+    border-bottom: 2px solid #38BDF8; /* Toque del celeste Osinergmin */
+    padding-bottom: 8px;
+    display: inline-block;
 }
 
-/* Assistant name color */
-.cl-assistant-name, .MuiTypography-root.step-name {
-  color: var(--primary-color) !important;
-  font-weight: bold;
+/* 5. Ajustes al input de texto para que parezca una barra de búsqueda moderna */
+#chat-input {
+    border-radius: 24px !important;
+    border: 1px solid #CBD5E1 !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+    padding: 15px 25px !important;
 }

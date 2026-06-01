@@ -1,4 +1,6 @@
 import os
+import nest_asyncio
+nest_asyncio.apply()
 from dotenv import load_dotenv
 
 # Cargar .env de forma robusta desde la raíz del proyecto (directorio padre) antes de importar Chainlit
@@ -208,7 +210,17 @@ def fetch_tools_from_server(base_url):
             return []
     except Exception as e:
         print(f"Error conectando al servidor para listar herramientas: {e}")
-        return []
+        print("MOCK ACTIVADO: El servidor MCP no está corriendo, inyectando herramientas simuladas para que el frontend React funcione.")
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_catalogo_datos",
+                    "description": "Mock tool: Obtiene el catálogo de datos disponibles.",
+                    "parameters": {"type": "object", "properties": {}, "required": []}
+                }
+            }
+        ]
 
 # ----------------- Ejecución Local de Herramientas -----------------
 
@@ -346,9 +358,8 @@ async def stream_llm_response(messages, tools=None):
 
 # ----------------- Generador Automático de Gráficos -----------------
 
-import matplotlib
-matplotlib.use('Agg') # Evitar que matplotlib intente abrir una interfaz GUI
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import plotly.express as px
 
 def try_generate_chart(data, query):
     """
@@ -422,32 +433,39 @@ def try_generate_chart(data, query):
         except:
             pass
             
-        # Generar el gráfico
-        fig, ax = plt.subplots(figsize=(10, 5))
+        # Generar el gráfico con Plotly
+        fig = go.Figure()
         
         # Estilos modernos y elegantes
-        ax.plot(plot_df[x_col].astype(str), plot_df[y_col], marker='o', linewidth=2, color='#0D6EFD', label=y_col)
+        fig.add_trace(go.Scatter(
+            x=plot_df[x_col].astype(str), 
+            y=plot_df[y_col], 
+            mode='lines+markers',
+            name=y_col,
+            line=dict(color='#0D6EFD', width=2),
+            marker=dict(size=8)
+        ))
         
         # Títulos limpios
         title_x = str(x_col).replace('_', ' ').title()
         title_y = str(y_col).replace('_', ' ').title()
         
-        ax.set_title(f"Evolución / Tendencia de {title_y} por {title_x}", fontsize=13, fontweight='bold', pad=15)
-        ax.set_xlabel(title_x, fontsize=10, labelpad=8)
-        ax.set_ylabel(title_y, fontsize=10, labelpad=8)
-        
-        # Rotar etiquetas del eje X si son largas
-        plt.xticks(rotation=45, ha='right')
-        ax.grid(True, linestyle='--', alpha=0.5)
-        ax.legend()
-        plt.tight_layout()
+        fig.update_layout(
+            title=f"Evolución / Tendencia de {title_y} por {title_x}",
+            xaxis_title=title_x,
+            yaxis_title=title_y,
+            template="plotly_white",
+            margin=dict(l=40, r=40, t=60, b=40),
+            hovermode="x unified"
+        )
         
         # Crear directorio temporal si no existe
         temp_dir = os.path.join(current_dir, "temp")
         os.makedirs(temp_dir, exist_ok=True)
         chart_path = os.path.join(temp_dir, "last_trend_chart.png")
-        plt.savefig(chart_path, dpi=150)
-        plt.close(fig)
+        # Para mantener compatibilidad con cl.Image, guardamos como imagen estática como fallback,
+        # pero es mejor devolver la figura directamente si el caller lo soporta.
+        fig.write_image(chart_path, scale=2)
         
         return chart_path
     except Exception as e:
@@ -548,21 +566,21 @@ async def run_local_chart_tool(args):
 
 # ----------------- Autenticación de Usuarios (Login) -----------------
 
-@cl.password_auth_callback
-def auth_callback(username: str, password: str):
-    """
-    Función de autenticación para los gerentes de Osinergmin.
-    Define las credenciales autorizadas de prueba para la demo.
-    """
-    valid_users = {
-        "admin": "admin2026",
-        "gerente_comercial": "comercial2026",
-        "gerente_operaciones": "operaciones2026"
-    }
-    
-    if username in valid_users and valid_users[username] == password:
-        return cl.User(identifier=username, username=username)
-    return None
+# @cl.password_auth_callback
+# def auth_callback(username: str, password: str):
+#     """
+#     Función de autenticación para los gerentes de Osinergmin.
+#     Define las credenciales autorizadas de prueba para la demo.
+#     """
+#     valid_users = {
+#         "admin": "admin2026",
+#         "gerente_comercial": "comercial2026",
+#         "gerente_operaciones": "operaciones2026"
+#     }
+# 
+#     if username in valid_users and valid_users[username] == password:
+#         return cl.User(identifier=username, username=username)
+#     return None
 
 # ----------------- Eventos de Chainlit -----------------
 

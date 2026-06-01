@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-osi-blue: #0039AA;
+  --color-osi-blue-dark: #002B80;
+  --color-osi-blue-light: #03A9F4;
+  --color-osi-yellow: #FBE122;
+  --color-osi-green: #35CC29;
+  --color-osi-orange: #F6A229;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f8fafc;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
