@@ -1,4 +1,4 @@
-import { IDataset } from '../../domain/types/chat';
+import type { IDataset } from '../../domain/types/chat';
 import { FileText, ExternalLink, Download, Info } from 'lucide-react';
 
 interface DatasetCardProps extends IDataset {}

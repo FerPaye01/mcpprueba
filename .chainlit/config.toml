@@ -188,3 +188,6 @@ light = "#03A9F4"
 
 [meta]
 generated_by = "2.11.1"
+
+[oauth]
+providers = ["azure-ad"]

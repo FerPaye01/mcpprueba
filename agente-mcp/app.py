@@ -472,6 +472,88 @@ def try_generate_chart(data, query):
         print(f"Error generando gráfico automático: {e}")
         return None
 
+def try_generate_chart_json(data, query):
+    """
+    Analiza los datos y la consulta del usuario para generar los metadatos de un gráfico interactivo.
+    Identifica columnas X (temporal/categoría) e Y (valores numéricos) y devuelve un diccionario serializable a JSON.
+    """
+    try:
+        if not isinstance(data, list) or len(data) == 0:
+            return None
+            
+        df = pd.DataFrame(data)
+        
+        # Eliminar columnas de control irrelevantes en la graficación
+        cols_to_drop = [c for c in df.columns if any(p in c.lower() for p in ["id_", "co_", "ip_", "usuario", "estado"])]
+        plot_df_cols = [c for c in df.columns if c not in cols_to_drop]
+        
+        # 1. Identificar eje X (Temporal/Categorías)
+        x_col = None
+        date_keywords = ["fecha", "periodo", "anio", "mes", "dia", "date", "fe_", "nu_anio", "period", "fec", "central", "empresa", "nombre", "tipo"]
+        
+        for col in plot_df_cols:
+            col_lower = col.lower()
+            if any(kw in col_lower for kw in date_keywords):
+                x_col = col
+                break
+                
+        if not x_col and len(plot_df_cols) > 0:
+            x_col = plot_df_cols[0]
+            
+        # 2. Identificar eje Y (Valores Numéricos)
+        y_cols = []
+        for col in plot_df_cols:
+            if col == x_col:
+                continue
+            if pd.api.types.is_numeric_dtype(df[col]):
+                y_cols.append(col)
+                
+        # Si no hay numéricas por tipo, intentar convertir bajo palabras clave
+        if not y_cols:
+            numeric_keywords = ["precio", "demanda", "cantidad", "cmo", "inventario", "mo_", "nu_", "valor", "monto", "ejecutada", "total", "potencia", "mw", "kw"]
+            for col in plot_df_cols:
+                if col == x_col:
+                    continue
+                if any(kw in col.lower() for kw in numeric_keywords):
+                    try:
+                        df[col] = pd.to_numeric(df[col])
+                        y_cols.append(col)
+                    except:
+                        pass
+                        
+        if not x_col or not y_cols:
+            return None
+            
+        y_col = y_cols[0]
+        
+        # Limpiar nulos para graficar
+        plot_df = df[[x_col, y_col]].dropna()
+        if len(plot_df) == 0:
+            return None
+            
+        # Ordenar por el eje X si aplica
+        try:
+            plot_df = plot_df.sort_values(by=x_col)
+        except:
+            pass
+            
+        # Limitar a top 25 registros para que el gráfico sea legible en pantalla
+        if len(plot_df) > 25:
+            plot_df = plot_df.head(25)
+            
+        # Formatear datos a JSON estructurado
+        chart_data = {
+            "tipo": "lineas" if any(k in x_col.lower() for k in ["fecha", "periodo", "anio", "mes", "dia", "date"]) else "barras",
+            "titulo": f"Evolución / Tendencia de {str(y_col).replace('_', ' ').title()} por {str(x_col).replace('_', ' ').title()}",
+            "columna_x": x_col,
+            "columna_y": y_col,
+            "datos": plot_df.to_dict(orient="records")
+        }
+        return chart_data
+    except Exception as e:
+        print(f"Error analizando datos para JSON Chart: {e}")
+        return None
+
 async def run_local_chart_tool(args):
     """
     Ejecuta la creación local de gráficos basada en la última consulta de datos de la sesión.
@@ -550,10 +632,20 @@ async def run_local_chart_tool(args):
                 
         plt.tight_layout()
         
+        # Generar JSON estructurado para el frontend React
+        chart_json = {
+            "tipo": tipo,
+            "titulo": titulo,
+            "columna_x": x_col,
+            "columna_y": y_col,
+            "datos": plot_df.to_dict(orient="records")
+        }
+        chart_block = f"\n\n```json-chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```"
+
         # Enviar elemento inline cl.Pyplot
         pyplot_element = cl.Pyplot(figure=fig, name="grafico", display="inline")
         await cl.Message(
-            content=f"📊 **Gráfico generado:** {titulo}",
+            content=f"📊 **Gráfico generado:** {titulo}{chart_block}",
             elements=[pyplot_element],
             author="Sistema"
         ).send()
@@ -566,26 +658,34 @@ async def run_local_chart_tool(args):
 
 # ----------------- Autenticación de Usuarios (Login) -----------------
 
-# @cl.password_auth_callback
-# def auth_callback(username: str, password: str):
-#     """
-#     Función de autenticación para los gerentes de Osinergmin.
-#     Define las credenciales autorizadas de prueba para la demo.
-#     """
-#     valid_users = {
-#         "admin": "admin2026",
-#         "gerente_comercial": "comercial2026",
-#         "gerente_operaciones": "operaciones2026"
-#     }
-# 
-#     if username in valid_users and valid_users[username] == password:
-#         return cl.User(identifier=username, username=username)
-#     return None
+@cl.password_auth_callback
+def auth_callback(username: str, password: str):
+    """
+    Función de autenticación temporal y ágil para el prototipo.
+    Acepta cualquier nombre de usuario o correo de forma dinámica.
+    """
+    clean_username = username.strip()
+    if not clean_username:
+        return None
+
+    email = clean_username
+    if "@" not in clean_username:
+        # Reemplazar espacios y formatear correo temporal
+        email_prefix = clean_username.lower().replace(" ", ".")
+        email = f"{email_prefix}@osinergmin.gob.pe"
+        
+    display_name = clean_username
+    if "@" in clean_username:
+        display_name = clean_username.split("@")[0].replace(".", " ").title()
+
+    # Devolvemos el usuario autenticado dinámicamente
+    return cl.User(identifier=email, username=email, display_name=display_name)
 
 # ----------------- Eventos de Chainlit -----------------
 
 @cl.on_chat_start
 async def start():
+    print("\n[BACKEND] --- ON CHAT START TRIGGERED ---")
     # Obtener el nombre del gerente desde la sesión autenticada de forma robusta
     user = cl.user_session.get("user")
     gerente_name = "Gerente"
@@ -736,6 +836,7 @@ async def setup_agent(settings):
 
 @cl.on_message
 async def main(message: cl.Message):
+    print(f"\n[BACKEND] --- ON MESSAGE TRIGGERED --- Content: {message.content!r}")
     # Mantener el resultado de herramientas de turnos anteriores para permitir graficar datos persistentes
     cl.user_session.set("chart_generated_in_turn", False)
     clean_query = message.content.strip().lower()
@@ -744,9 +845,11 @@ async def main(message: cl.Message):
     history = cl.user_session.get("history")
     openai_tools = cl.user_session.get("openai_tools")
     gerente = cl.user_session.get("gerente", "Gerente")
+    print(f"[BACKEND] Gerente: {gerente!r}, History length: {len(history) if history else 0}, Tools count: {len(openai_tools) if openai_tools else 0}")
     
     # 1. Control de Consumo Justo
     if is_rate_limited():
+        print("[BACKEND] Rate limited!")
         await cl.Message(
             content="⚠️ **Control de Consumo Justo:** He alcanzado mi límite de cuota para esta sesión (máximo 50 consultas en 10 minutos). Por favor, espere unos momentos antes de realizar otra consulta.",
             author="Sistema"
@@ -757,6 +860,7 @@ async def main(message: cl.Message):
     faq_cache = cl.user_session.get("faq_cache", {})
     cached_data = find_fuzzy_match(message.content, faq_cache)
     if cached_data:
+        print("[BACKEND] FAQ Cache hit!")
         cached_ans = cached_data["response"]
         cached_model = cached_data["model"]
         
@@ -777,6 +881,7 @@ async def main(message: cl.Message):
 
     # Guardar mensaje del usuario
     history.append({"role": "user", "content": message.content})
+    print("[BACKEND] User message appended. Starting LLM loop...")
     
     # Variables de control de tokens del stream actual
     prompt_tokens = 0
@@ -787,8 +892,11 @@ async def main(message: cl.Message):
     while True:
         # Obtener respuesta del LLM con el enrutador de resiliencia
         try:
+            print("[BACKEND] Calling stream_llm_response...")
             stream, active_model = await stream_llm_response(history, openai_tools)
+            print(f"[BACKEND] stream_llm_response returned successfully. Active model: {active_model}")
         except Exception as e:
+            print(f"[BACKEND] stream_llm_response failed: {e}")
             await cl.Message(
                 content=f"❌ **Error crítico de comunicación con el LLM:** {str(e)}\n"
                         "Por favor verifica tus claves de API (`LLM_API_KEY` o `GEMINI_API_KEY`) en el archivo `.env`.",
@@ -801,7 +909,10 @@ async def main(message: cl.Message):
         msg = None
         
         # Procesar streaming de la respuesta
+        print("[BACKEND] Iterating over stream chunks...")
+        chunk_count = 0
         async for chunk in stream:
+            chunk_count += 1
             # Capturar estadísticas de uso del token si el chunk final las incluye
             if getattr(chunk, "usage", None) is not None:
                 prompt_tokens = chunk.usage.prompt_tokens
@@ -815,6 +926,7 @@ async def main(message: cl.Message):
             # Si el modelo envía texto, hacemos stream en pantalla
             if delta.content is not None:
                 if msg is None:
+                    print(f"[BACKEND] Creating cl.Message for stream (Author: Agente ({active_model}))...")
                     msg = cl.Message(content="", author=f"Agente ({active_model})")
                     await msg.send()
                 full_text += delta.content
@@ -836,6 +948,8 @@ async def main(message: cl.Message):
                         tool_calls_chunks[idx]["function"]["name"] += tc.function.name
                     if tc.function and tc.function.arguments:
                         tool_calls_chunks[idx]["function"]["arguments"] += tc.function.arguments
+        
+        print(f"[BACKEND] Stream finished. Total chunks: {chunk_count}, msg created: {msg is not None}, tool calls count: {len(tool_calls_chunks)}")
 
         # Finalizar el streaming del mensaje si se envió texto
         if msg:
@@ -862,10 +976,12 @@ async def main(message: cl.Message):
                 except Exception as je:
                     args = {"error": f"Invalid JSON arguments: {str(je)}", "raw": raw_args}
                     
+                print(f"[BACKEND] Executing tool: {name!r} with args: {args}")
                 if name == "crear_grafico":
                     async with cl.Step(name="Creando gráfico interactivo", type="tool") as step:
                         step.input = args
                         success, message_text = await run_local_chart_tool(args)
+                        print(f"[BACKEND] Chart tool returned: success={success}, msg={message_text}")
                         if success:
                             step.output = "Gráfico generado y mostrado con éxito en el chat."
                             result = {"status": "success", "message": message_text}
@@ -879,6 +995,7 @@ async def main(message: cl.Message):
                         
                         # Llamar localmente al servidor de Osinergmin
                         result = run_local_tool(MCP_SERVER_URL, name, args)
+                        print(f"[BACKEND] Tool {name!r} returned output of length: {len(str(result))} (sample: {str(result)[:200]}...)")
                         
                         # Mostrar resultados en la UI
                         if isinstance(result, list):
@@ -921,15 +1038,22 @@ async def main(message: cl.Message):
             
             if not chart_already_generated and any(kw in clean_query for kw in chart_keywords) and isinstance(last_result, list) and len(last_result) > 0:
                 chart_path = try_generate_chart(last_result, message.content)
+                chart_json = try_generate_chart_json(last_result, message.content)
+                
+                chart_block = ""
+                if chart_json:
+                    chart_block = f"\n\n```json-chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```"
+                
                 if chart_path:
                     # Enviar el gráfico generado como elemento inline en Chainlit
                     image_element = cl.Image(path=chart_path, name="tendencia", display="inline")
                     if msg:
                         msg.elements = [image_element]
+                        msg.content += chart_block
                         await msg.update()
                     else:
                         await cl.Message(
-                            content="Aquí tiene el gráfico de la tendencia basado en los datos recuperados:",
+                            content="Aquí tiene el gráfico de la tendencia basado en los datos recuperados:" + chart_block,
                             elements=[image_element],
                             author=f"Agente ({active_model})"
                         ).send()

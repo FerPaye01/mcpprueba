@@ -1,5 +1,5 @@
 import { Lock, Filter } from 'lucide-react';
-import { IFilterState } from '../../domain/types/chat';
+import type { IFilterState } from '../../domain/types/chat';
 
 interface FilterPanelProps {
   filters: IFilterState;
