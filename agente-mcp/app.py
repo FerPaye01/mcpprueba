@@ -22,6 +22,9 @@ import chainlit as cl
 import openai
 import pandas as pd
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 # Configuración del Prompt del Sistema institucional
 SYSTEM_PROMPT = """
@@ -1010,28 +1013,7 @@ async def main(message: cl.Message):
         ).send()
         return
 
-    # 2. Caché de Preguntas Frecuentes (FAQ) de la Sesión
-    faq_cache = cl.user_session.get("faq_cache", {})
-    cached_data = find_fuzzy_match(message.content, faq_cache)
-    if cached_data:
-        print("[BACKEND] FAQ Cache hit!")
-        cached_ans = cached_data["response"]
-        cached_model = cached_data["model"]
-        
-        # Enviar directamente al chat para no romper la inmersión (sin prefijos técnicos de caché)
-        await cl.Message(
-            content=cached_ans,
-            author=f"Agente ({cached_model})"
-        ).send()
-        
-        # Loguear en log_uso.txt indicando uso de caché
-        log_usage(gerente, f"Caché Sesión ({cached_model})", message.content, 0, 0)
-        
-        # Añadir al historial para consistencia
-        history.append({"role": "user", "content": message.content})
-        history.append({"role": "assistant", "content": cached_ans})
-        cl.user_session.set("history", history)
-        return
+    # 2. Caché de Preguntas Frecuentes (FAQ) deshabilitada para evitar colisiones al cambiar filtros
 
     # Guardar mensaje del usuario
     history.append({"role": "user", "content": message.content})
@@ -1177,10 +1159,7 @@ async def main(message: cl.Message):
             })
             cl.user_session.set("history", history)
             
-            # Guardar en el caché de la sesión de usuario
-            faq_cache = cl.user_session.get("faq_cache", {})
-            faq_cache[message.content] = {"response": full_text, "model": active_model}
-            cl.user_session.set("faq_cache", faq_cache)
+            # Guardar en caché omitido (caché deshabilitada)
             
             # Registrar en log_uso.txt
             log_usage(gerente, active_model, message.content, prompt_tokens, completion_tokens)
@@ -1198,19 +1177,30 @@ async def main(message: cl.Message):
                 if chart_json:
                     chart_block = f"\n\n```json-chart\n{json.dumps(chart_json, ensure_ascii=False, indent=2)}\n```"
                 
-                if chart_path:
-                    # Enviar el gráfico generado como elemento inline en Chainlit
-                    image_element = cl.Image(path=chart_path, name="tendencia", display="inline")
-                    if msg:
-                        msg.elements = [image_element]
-                        msg.content += chart_block
-                        await msg.update()
+                if chart_block:
+                    if chart_path:
+                        # Enviar el gráfico generado como elemento inline en Chainlit junto al bloque interactivo
+                        image_element = cl.Image(path=chart_path, name="tendencia", display="inline")
+                        if msg:
+                            msg.elements = [image_element]
+                            msg.content += chart_block
+                            await msg.update()
+                        else:
+                            await cl.Message(
+                                content="Aquí tiene el gráfico de la tendencia basado en los datos recuperados:" + chart_block,
+                                elements=[image_element],
+                                author=f"Agente ({active_model})"
+                            ).send()
                     else:
-                        await cl.Message(
-                            content="Aquí tiene el gráfico de la tendencia basado en los datos recuperados:" + chart_block,
-                            elements=[image_element],
-                            author=f"Agente ({active_model})"
-                        ).send()
+                        # Si falló la exportación de imagen estática (ej: falta kaleido), enviamos solo el bloque interactivo
+                        if msg:
+                            msg.content += chart_block
+                            await msg.update()
+                        else:
+                            await cl.Message(
+                                content="Aquí tiene el gráfico de la tendencia basado en los datos recuperados:" + chart_block,
+                                author=f"Agente ({active_model})"
+                            ).send()
                         
             # --- DETECCIÓN Y GENERACIÓN AUTOMÁTICA DE DATASETS ---
             last_tool_run = None
