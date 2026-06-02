@@ -427,7 +427,14 @@ async def stream_llm_response(messages, tools=None):
                 f"- Matriz Energética (Categorías): {categoria_str or 'Todas'}\n"
                 f"IMPORTANTE: Debes priorizar y restringir tus respuestas y las consultas a base de datos (MCP) "
                 f"usando estas especificaciones (por ejemplo, si la ubicación es Arequipa y no la Sede Nacional, filtra las consultas por "
-                f"el departamento de Arequipa)."
+                f"el departamento de Arequipa usando el campo `NO_DEPARTAMENTO: 'AREQUIPA'`).\n"
+                f"REGLAS CRÍTICAS DE MAPEO DE FILTROS EN `query_data` PARA LA TABLA `CMO_TX_CENTRAL_GEN` (Centrales):\n"
+                f"- NUNCA uses la columna `DE_FUENTE_ENER` para filtrar por tecnología (ahí se guardan nombres de ríos y descripciones libres, no las tecnologías en mayúsculas).\n"
+                f"- Usa siempre la columna `TI_TIPO_CENTRAL` para filtrar la tecnología/fuente de energía.\n"
+                f"- Si la matriz/categoría seleccionada en el sidebar es 'Solar', filtra usando `TI_TIPO_CENTRAL: 'CENTRAL SOLAR'`.\n"
+                f"- Si la matriz/categoría seleccionada en el sidebar es 'Hidráulica', filtra usando `TI_TIPO_CENTRAL: 'CENTRAL HIDROELECTRICA'` o `TI_TIPO_CENTRAL: 'CENTRAL HIDROELECTRICA RER'`.\n"
+                f"- Si la matriz/categoría seleccionada en el sidebar es 'Eólica', filtra usando `TI_TIPO_CENTRAL: 'CENTRAL EOLICA'`.\n"
+                f"- Para el estado de la central, filtra usando `IN_ESTADO: 'EN SERVICIO'` si el usuario solicita centrales activas, en servicio o operativas.\n"
             )
             system_msg = dict(injected_messages[0])
             system_msg["content"] = system_msg["content"] + filtros_context
