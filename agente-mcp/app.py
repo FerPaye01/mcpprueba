@@ -262,8 +262,37 @@ async def stream_llm_response(messages, tools=None):
     # Recargar variables de entorno dinámicamente para capturar cambios en .env (como la API key o GEMINI_MODEL) sin reiniciar el servidor
     load_dotenv(dotenv_path, override=True)
     
-    # Clonar y adaptar mensajes dinámicamente con contexto de datos
+    # Clonar y adaptar mensajes dinámicamente con contexto de datos e filtros activos
     injected_messages = list(messages)
+    
+    # 1. Inyectar Filtros Activos de la Sesión
+    filtros_activos = cl.user_session.get("filtros_activos")
+    if filtros_activos and len(injected_messages) > 0:
+        try:
+            ubicacion = filtros_activos.get("ubicacion", "Todas")
+            periodo = filtros_activos.get("periodo", "Todos")
+            categoria = filtros_activos.get("categoria", [])
+            if isinstance(categoria, list):
+                categoria_str = ", ".join(categoria)
+            else:
+                categoria_str = str(categoria)
+                
+            filtros_context = (
+                f"\n\nFILTROS ACTIVOS SELECCIONADOS POR EL USUARIO EN EL SIDEBAR:\n"
+                f"- Geografía/Ubicación: {ubicacion}\n"
+                f"- Periodo: {periodo}\n"
+                f"- Matriz Energética (Categorías): {categoria_str or 'Todas'}\n"
+                f"IMPORTANTE: Debes priorizar y restringir tus respuestas y las consultas a base de datos (MCP) "
+                f"usando estas especificaciones (por ejemplo, si la ubicación es Arequipa y no la Sede Nacional, filtra las consultas por "
+                f"el departamento de Arequipa)."
+            )
+            system_msg = dict(injected_messages[0])
+            system_msg["content"] = system_msg["content"] + filtros_context
+            injected_messages[0] = system_msg
+        except Exception as fe:
+            print(f"Error inyectando filtros activos en prompt: {fe}")
+
+    # 2. Inyectar Contexto de Datos de la Sesión
     last_result = cl.user_session.get("last_tool_result")
     if last_result and isinstance(last_result, list) and len(last_result) > 0 and len(injected_messages) > 0:
         try:

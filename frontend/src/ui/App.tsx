@@ -8,7 +8,7 @@ import {
 } from '@chainlit/react-client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Search, RefreshCw, ChevronRight, LogOut, CheckCircle2 } from 'lucide-react';
+import { Search, RefreshCw, LogOut, CheckCircle2 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { FilterPanel } from './components/FilterPanel';
 import { DatasetCard } from './components/DatasetCard';
@@ -44,27 +44,34 @@ export default function App() {
   });
 
   // --- Estado de Autenticación de Demo ---
-  const [usernameInput, setUsernameInput] = useState('');
-  const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   const { user, isAuthenticated, isReady } = useAuth();
   const { connect } = useChatSession();
   const { messages } = useChatMessages();
-  const { sendMessage } = useChatInteract();
+  const { sendMessage, updateChatSettings } = useChatInteract();
   const { loading, connected } = useChatData();
   
   const flatMessages = flattenMessages(messages);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isReady && !isAuthenticated && !loginLoading) {
+      // Auto-generar un analista aleatorio de Osinergmin e iniciar sesión al instante
+      const prefixes = ['Analista', 'Consultor', 'Fiscalizador', 'Supervisor', 'Coordinador', 'Especialista', 'Auditor'];
+      const suffixes = ['Arequipa', 'Solar', 'Hidrocarburos', 'Tarifas', 'Matriz Energetica', 'Sede Central', 'Lima'];
+      const randomNum = Math.floor(Math.random() * 900) + 100;
+      const randomName = `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${suffixes[Math.floor(Math.random() * suffixes.length)]} ${randomNum}`;
+      
+      handleLogin(undefined, randomName);
+    } else if (isAuthenticated) {
       connect({ userEnv: {} });
     }
-  }, [isAuthenticated]);
+  }, [isReady, isAuthenticated, loginLoading]);
 
   const handleLogin = async (e?: React.FormEvent, nameOverride?: string) => {
     if (e) e.preventDefault();
-    const finalName = (nameOverride || usernameInput).trim();
+    const finalName = (nameOverride || '').trim();
     if (!finalName) {
       setLoginError('Por favor ingrese un nombre para iniciar.');
       return;
@@ -86,16 +93,6 @@ export default function App() {
     } finally {
       setLoginLoading(false);
     }
-  };
-
-  const handleGenerateRandomUser = () => {
-    const prefixes = ['Analista', 'Consultor', 'Fiscalizador', 'Supervisor', 'Coordinador', 'Especialista', 'Auditor'];
-    const suffixes = ['Arequipa', 'Solar', 'Hidrocarburos', 'Tarifas', 'Matriz Energetica', 'Sede Central', 'Lima'];
-    const randomNum = Math.floor(Math.random() * 900) + 100;
-    
-    const randomName = `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${suffixes[Math.floor(Math.random() * suffixes.length)]} ${randomNum}`;
-    setUsernameInput(randomName);
-    handleLogin(undefined, randomName);
   };
 
   useEffect(() => {
@@ -153,11 +150,15 @@ export default function App() {
   const applyFilters = () => {
     const activeEnergies = Object.entries(filters.energyMatrix)
         .filter(([_, active]) => active)
-        .map(([name]) => name)
-        .join(', ');
+        .map(([name]) => name);
     
-    const filterCommand = `Actualizar filtros de análisis: \n- Geografía: ${filters.geography}\n- Matriz Energética: ${activeEnergies || 'Ninguna'}`;
-    handleSendMessage(filterCommand);
+    // Sincronizar los filtros seleccionados con el backend de Chainlit
+    updateChatSettings({
+      ubicacion: filters.geography,
+      periodo: "Todos",
+      categoria: activeEnergies,
+      entidad: []
+    });
   };
 
   if (!isReady) {
@@ -171,74 +172,20 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="h-screen w-screen flex overflow-hidden bg-slate-100 text-slate-800 font-sans text-[15px] items-center justify-center p-4">
-        <div className="w-full max-w-[460px] bg-white rounded-[3rem] shadow-2xl border border-slate-100 p-10 flex flex-col">
-          {/* Logo & Cabecera */}
-          <div className="flex flex-col items-center text-center mb-10 shrink-0">
-            <div className="w-16 h-16 rounded-[1.75rem] bg-osi-blue/10 flex items-center justify-center shadow-inner mb-6">
-              <svg className="w-7 h-7 text-osi-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <h2 className="font-black text-2xl text-slate-800 tracking-tight mb-2">Terminal OsiData</h2>
-            <p className="text-xs font-bold text-slate-400 leading-relaxed max-w-[280px]">
-              Ingrese su nombre para iniciar una sesión de análisis temporal en el prototipo.
-            </p>
-          </div>
-
-          {/* Formulario */}
-          <form onSubmit={(e) => handleLogin(e)} className="space-y-6 shrink-0">
-            <div>
-              <label className="block text-[10px] uppercase font-black text-slate-400 mb-2.5 tracking-widest">Nombre o Correo del Analista</label>
-              <div className="relative group">
-                <input 
-                  type="text" 
-                  required
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="Ej: Carlos Perez"
-                  className="w-full border-2 border-slate-100 bg-slate-50/55 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-osi-blue/15 focus:bg-white transition-all font-bold text-slate-700 shadow-inner"
-                />
-                <svg className="w-5 h-5 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2 group-focus-within:text-osi-blue transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-            </div>
-
-            {loginError && (
-              <div className="p-4 bg-red-50 border-2 border-red-100/50 rounded-2xl text-xs font-bold text-red-500 leading-relaxed">
-                ⚠️ {loginError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full bg-osi-blue text-white py-5 rounded-2xl font-black text-xs hover:bg-osi-blue-dark active:scale-95 transition-all shadow-xl shadow-osi-blue/20 cursor-pointer uppercase tracking-[0.1em] flex items-center justify-center gap-2"
-            >
-              {loginLoading ? 'Iniciando Sesión...' : 'Entrar a la Terminal'}
-              {!loginLoading && <ChevronRight className="w-4 h-4" />}
-            </button>
-          </form>
-
-          {/* Separador */}
-          <div className="flex items-center my-8 shrink-0">
-            <hr className="flex-1 border-slate-100" />
-            <span className="px-4 text-[10px] font-black uppercase tracking-widest text-slate-300">O</span>
-            <hr className="flex-1 border-slate-100" />
-          </div>
-
-          {/* Botón de Generación de Usuario Temporal Aleatorio */}
-          <button
-            type="button"
-            disabled={loginLoading}
-            onClick={handleGenerateRandomUser}
-            className="w-full bg-slate-950 hover:bg-slate-900 text-white py-4.5 rounded-2xl font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-md hover:scale-[1.01]"
-          >
-            <RefreshCw className={`w-4 h-4 text-white mr-1 ${loginLoading ? 'animate-spin' : ''}`} />
-            Generar Usuario Temporal Aleatorio
-          </button>
-        </div>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+        <RefreshCw className="w-10 h-10 animate-spin text-osi-blue mb-4" />
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-1">
+          {loginError ? 'Error al Iniciar' : 'Asignando Identidad de Analista...'}
+        </p>
+        {loginError ? (
+          <p className="text-xs text-red-500 font-bold max-w-sm text-center px-4 leading-relaxed">
+            ⚠️ {loginError}. Intente recargar la página.
+          </p>
+        ) : (
+          <p className="text-[11px] font-semibold text-slate-400/60 italic">
+            Creando sesión temporal única para evitar colisión de datos.
+          </p>
+        )}
       </div>
     );
   }
