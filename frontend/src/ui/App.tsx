@@ -8,7 +8,7 @@ import {
 } from '@chainlit/react-client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Search, RefreshCw, LogOut, CheckCircle2 } from 'lucide-react';
+import { Search, RefreshCw, LogOut, CheckCircle2, X } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { FilterPanel } from './components/FilterPanel';
 import { DatasetCard } from './components/DatasetCard';
@@ -31,6 +31,7 @@ const flattenMessages = (items: any[]): any[] => {
 
 export default function App() {
   const [inputValue, setInputValue] = useState('');
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // --- Estado de Filtros Centralizado ---
   const [filters, setFilters] = useState<IFilterState>({
@@ -254,6 +255,13 @@ export default function App() {
                                       th: ({node, ...props}) => <th className="px-5 py-4 text-left text-[10px] font-black uppercase text-osi-blue tracking-widest" {...props} />,
                                       td: ({node, ...props}) => <td className="px-5 py-4 text-[13px] border-t border-slate-50 font-semibold" {...props} />,
                                       strong: ({node, ...props}) => <strong className="font-black" {...props} />,
+                                      img: ({node, ...props}) => (
+                                        <img 
+                                          {...props} 
+                                          className="rounded-3xl max-w-full h-auto cursor-zoom-in transition-transform duration-300 hover:scale-[1.01] hover:shadow-2xl shadow-md border border-slate-200/50 my-6 animate-in fade-in zoom-in-95 duration-500"
+                                          onClick={() => setLightboxImage(props.src || null)}
+                                        />
+                                      ),
                                       code: ({node, className, children, ...props}) => {
                                         const match = /language-(\w+)/.exec(className || '');
                                         const lang = match ? match[1] : '';
@@ -354,6 +362,32 @@ export default function App() {
         onEnergyToggle={(key) => setFilters(f => ({ ...f, energyMatrix: { ...f.energyMatrix, [key]: !f.energyMatrix[key] } }))}
         onApply={applyFilters}
       />
+
+      {/* Lightbox para imágenes en markdown */}
+      {lightboxImage && (
+        <div 
+          onClick={() => setLightboxImage(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-6 select-none animate-in fade-in duration-200 cursor-zoom-out"
+        >
+          <button 
+            onClick={() => setLightboxImage(null)}
+            className="absolute top-6 right-6 p-4 bg-white/10 hover:bg-white/20 hover:scale-105 active:scale-95 text-white rounded-2xl cursor-pointer transition-all duration-300 z-10"
+            title="Cerrar Imagen"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-5xl max-h-[85vh] overflow-hidden rounded-[2.5rem] bg-white p-3 shadow-2xl border border-white/15 animate-in zoom-in-95 duration-200"
+          >
+            <img 
+              src={lightboxImage} 
+              alt="Visualización ampliada" 
+              className="w-full h-auto max-h-[80vh] object-contain rounded-[2rem]"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
