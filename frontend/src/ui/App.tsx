@@ -256,47 +256,52 @@ export default function App() {
                                       strong: ({node, ...props}) => <strong className="font-black" {...props} />,
                                       code: ({node, className, children, ...props}) => {
                                         const match = /language-(\w+)/.exec(className || '');
-                                        if (match && match[1] === 'json-chart') {
+                                        const lang = match ? match[1] : '';
+                                        const codeContent = String(children).trim();
+                                        
+                                        // 1. Intentar renderizar como Gráfico Interactivo si cumple con la estructura
+                                        if (lang === 'json-chart' || lang === 'json' || lang === '') {
                                           try {
-                                            const chartData = JSON.parse(String(children));
-                                            return <InteractiveChart data={chartData} />;
+                                            if (codeContent.startsWith('{')) {
+                                              const parsed = JSON.parse(codeContent);
+                                              if (parsed && parsed.tipo && parsed.columna_x && parsed.columna_y && parsed.datos) {
+                                                return <InteractiveChart data={parsed} />;
+                                              }
+                                            }
                                           } catch (err) {
-                                            console.error("Error parsing json-chart:", err);
-                                            return (
-                                              <pre className="bg-slate-50 p-4 rounded-2xl text-xs overflow-x-auto border border-slate-100">
-                                                <code>{children}</code>
-                                              </pre>
-                                            );
+                                            // No es un JSON de gráfico
                                           }
                                         }
-                                        if (match && match[1] === 'json-datasets') {
+                                        
+                                        // 2. Intentar renderizar como Catálogo de Datasets si cumple con la estructura
+                                        if (lang === 'json-datasets' || lang === 'json' || lang === '') {
                                           try {
-                                            const datasets = JSON.parse(String(children));
-                                            return (
-                                              <div className="my-6 w-full animate-in fade-in slide-in-from-left-4 duration-500">
-                                                <div className="flex gap-5 overflow-x-auto pb-6 px-1 no-scrollbar">
-                                                  {datasets.map((ds: any, i: number) => (
-                                                    <DatasetCard 
-                                                      key={i}
-                                                      title={ds.title || ds.table_name || 'Dataset'} 
-                                                      description={ds.description || ds.desc || 'Sin descripción'}
-                                                      format={ds.format || 'SQL Table'} 
-                                                      license={ds.license || 'Osinergmin'} 
-                                                      organization={ds.organization || 'Gobernanza de Datos'}
-                                                    />
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            );
+                                            if (codeContent.startsWith('[')) {
+                                              const parsed = JSON.parse(codeContent);
+                                              if (Array.isArray(parsed) && parsed.length > 0 && (parsed[0].table_name || parsed[0].title)) {
+                                                return (
+                                                  <div className="my-6 w-full animate-in fade-in slide-in-from-left-4 duration-500">
+                                                    <div className="flex gap-5 overflow-x-auto pb-6 px-1 no-scrollbar">
+                                                      {parsed.map((ds: any, i: number) => (
+                                                        <DatasetCard 
+                                                          key={i}
+                                                          title={ds.title || ds.table_name || 'Dataset'} 
+                                                          description={ds.description || ds.desc || 'Sin descripción'}
+                                                          format={ds.format || 'SQL Table'} 
+                                                          license={ds.license || 'Osinergmin'} 
+                                                          organization={ds.organization || 'Gobernanza de Datos'}
+                                                        />
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              }
+                                            }
                                           } catch (err) {
-                                            console.error("Error parsing json-datasets:", err);
-                                            return (
-                                              <pre className="bg-slate-50 p-4 rounded-2xl text-xs overflow-x-auto border border-slate-100">
-                                                <code>{children}</code>
-                                              </pre>
-                                            );
+                                            // No es un JSON de datasets
                                           }
                                         }
+                                        
                                         return <code className={className} {...props}>{children}</code>;
                                       }
                                     }}
