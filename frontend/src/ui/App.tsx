@@ -59,9 +59,8 @@ export default function App() {
     if (isReady && !isAuthenticated && !loginLoading) {
       // Auto-generar un analista aleatorio de Osinergmin e iniciar sesión al instante
       const prefixes = ['Analista', 'Consultor', 'Fiscalizador', 'Supervisor', 'Coordinador', 'Especialista', 'Auditor'];
-      const suffixes = ['Arequipa', 'Solar', 'Hidrocarburos', 'Tarifas', 'Matriz Energetica', 'Sede Central', 'Lima'];
       const randomNum = Math.floor(Math.random() * 900) + 100;
-      const randomName = `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${suffixes[Math.floor(Math.random() * suffixes.length)]} ${randomNum}`;
+      const randomName = `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${randomNum}`;
       
       handleLogin(undefined, randomName);
     } else if (isAuthenticated) {
@@ -231,8 +230,6 @@ export default function App() {
                 flatMessages.map((message) => {
                     const isUser = message.type === 'user_message';
                     const messageText = message.output || (message as any).content || '';
-                    const hasDatasets = !isUser && typeof messageText === 'string' && messageText.toLowerCase().includes("conjuntos de datos") && messageText.toLowerCase().includes("encontrados");
-
                     return (
                         <div key={message.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-4 duration-500`}>
                             <div className={`max-w-[85%] lg:max-w-[70%] p-6 rounded-[2rem] shadow-xl border ${
@@ -272,6 +269,34 @@ export default function App() {
                                             );
                                           }
                                         }
+                                        if (match && match[1] === 'json-datasets') {
+                                          try {
+                                            const datasets = JSON.parse(String(children));
+                                            return (
+                                              <div className="my-6 w-full animate-in fade-in slide-in-from-left-4 duration-500">
+                                                <div className="flex gap-5 overflow-x-auto pb-6 px-1 no-scrollbar">
+                                                  {datasets.map((ds: any, i: number) => (
+                                                    <DatasetCard 
+                                                      key={i}
+                                                      title={ds.title || ds.table_name || 'Dataset'} 
+                                                      description={ds.description || ds.desc || 'Sin descripción'}
+                                                      format={ds.format || 'SQL Table'} 
+                                                      license={ds.license || 'Osinergmin'} 
+                                                      organization={ds.organization || 'Gobernanza de Datos'}
+                                                    />
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            );
+                                          } catch (err) {
+                                            console.error("Error parsing json-datasets:", err);
+                                            return (
+                                              <pre className="bg-slate-50 p-4 rounded-2xl text-xs overflow-x-auto border border-slate-100">
+                                                <code>{children}</code>
+                                              </pre>
+                                            );
+                                          }
+                                        }
                                         return <code className={className} {...props}>{children}</code>;
                                       }
                                     }}
@@ -280,23 +305,6 @@ export default function App() {
                                   </ReactMarkdown>
                                 </div>
                             </div>
-
-                            {hasDatasets && (
-                              <div className="mt-6 w-full animate-in fade-in slide-in-from-left-4 duration-700 delay-300">
-                                <div className="flex gap-5 overflow-x-auto pb-6 px-2 no-scrollbar">
-                                  <DatasetCard 
-                                    title="Generación Solar Q1 2024" 
-                                    description="Detalle de la generación de energía renovable (fotovoltaica) en el primer trimestre de 2024."
-                                    format="CSV, JSON" license="Open Data" organization="MINEM"
-                                  />
-                                  <DatasetCard 
-                                    title="Estadísticas Hidroeléctricas" 
-                                    description="Reporte consolidado de producción hidroeléctrica por cuenca y departamento durante 2023."
-                                    format="CSV" license="Osinergmin" organization="OSINERGMIN"
-                                  />
-                                </div>
-                              </div>
-                            )}
                         </div>
                     );
                 })
