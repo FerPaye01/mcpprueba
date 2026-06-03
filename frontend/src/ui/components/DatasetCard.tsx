@@ -1,9 +1,11 @@
 import type { IDataset } from '../../domain/types/chat';
 import { FileText, ExternalLink, Download, Info } from 'lucide-react';
 
-interface DatasetCardProps extends IDataset {}
+interface DatasetCardProps extends IDataset {
+  onImport?: (title: string, description: string) => void;
+}
 
-export const DatasetCard = ({ title, description, format, license, organization }: DatasetCardProps) => (
+export const DatasetCard = ({ title, description, format, license, organization, onImport }: DatasetCardProps) => (
   <div className="w-72 shrink-0 bg-white border border-slate-200 rounded-2xl p-4 flex flex-col shadow-sm hover:shadow-md hover:border-osi-blue/30 transition-all group">
     <div className="flex items-start justify-between mb-2">
       <h4 className="font-black text-sm text-osi-blue leading-tight pr-2 group-hover:text-osi-blue-dark transition-colors">{title}</h4>
@@ -29,7 +31,10 @@ export const DatasetCard = ({ title, description, format, license, organization 
         <button className="flex items-center justify-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl py-2 text-[10px] font-bold hover:bg-slate-100 transition-colors cursor-pointer">
           <ExternalLink className="w-3 h-3" /> Detalles
         </button>
-        <button className="flex items-center justify-center gap-1.5 bg-osi-blue text-white rounded-xl py-2 text-[10px] font-bold hover:bg-osi-blue-dark transition-colors cursor-pointer shadow-sm shadow-osi-blue/10">
+        <button 
+          onClick={() => onImport?.(title, description)}
+          className="flex items-center justify-center gap-1.5 bg-osi-blue text-white rounded-xl py-2 text-[10px] font-bold hover:bg-osi-blue-dark transition-colors cursor-pointer shadow-sm shadow-osi-blue/10"
+        >
           <Download className="w-3 h-3" /> Importar
         </button>
       </div>

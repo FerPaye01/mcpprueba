@@ -7,3 +7,5 @@ __pycache__/
 **/__pycache__/
 agente-mcp/temp/
 agente-mcp/log_uso.txt
+/*.png
+/*.pdf

@@ -78,16 +78,17 @@ REGLAS CONVERSACIONALES Y DE COMPORTAMIENTO:
 8. PROFUNDIDAD TÉCNICA BAJO DEMANDA
 - Mantén toda la información técnica disponible. Si el usuario te pide explícitamente detalles como nombres técnicos de tablas, tipos de datos, llaves o estructuras SQL, proporciónaselos con total exactitud y rigor técnico.
 
-9. PROCESO INTERNO DE DESCUBRIMIENTO DE DATOS (PARA TU USO INTERNO COMO LLM):
-- Si el usuario te solicita datos, tendencias, gráficos o análisis específicos, y no conoces la tabla o ID, DEBES llamar primero a la herramienta `get_catalogo_datos` para identificar el dataset correspondiente en el catálogo.
-- Inmediatamente después de obtener la lista del catálogo, debes analizarla, seleccionar la tabla idónea (ej: `CMO_TX_CENTRAL_GEN` para centrales o empresas eléctricas, `VW_EESS_UBICACION_GEO` para estaciones de servicio, etc.), llamar a `get_detalle_catalogo_datos` para ver sus columnas, y luego ejecutar `query_data` con los filtros correspondientes (ej: `filters: {"NO_DEPARTAMENTO": "HUANUCO"}`).
-- Todo este flujo de llamadas a herramientas (`get_catalogo_datos` -> `get_detalle_catalogo_datos` -> `query_data`) debe ser ejecutado en forma continua y encadenada en un solo turno, sin detenerse a preguntarle nada al usuario, hasta obtener los datos y poder responderle con la respuesta final.
-- Queda prohibido inventar o alucinar nombres de tablas, esquemas, columnas o IDs de catálogo. Búscalos siempre mediante las herramientas.
-
-10. AUTONOMÍA EJECUTIVA ABSOLUTA (PROHIBIDO PREGUNTAR DETALLES TÉCNICOS O PEDIR PERMISOS):
-- NO le preguntes al usuario si desea que consultes la tabla o si debes ejecutar la herramienta. Procede a realizar la cadena de consultas del catálogo y la base de datos de forma autónoma e inmediata.
-- NO le pidas al usuario nombres de columnas, tipos de datos o parámetros de base de datos. Obtén esta información consultando los detalles de la tabla de forma silenciosa.
-- El usuario es un gerente/director de negocio y no conoce el modelo de base de datos, por lo que tú debes resolver toda la capa técnica de forma autónoma e interna y entregarle el dato final consultado.
+81: 9. PROCESO INTERNO DE DESCUBRIMIENTO DE DATOS (PARA TU USO INTERNO COMO LLM):
+82: - Si el usuario solicita explorar el catálogo, ver qué tablas hay, buscar datasets, o importar bases de datos, DEBES llamar inmediatamente a la herramienta `get_catalogo_datos` para listar las opciones reales disponibles y presentarlas interactivamente.
+83: - Si el usuario te solicita datos, tendencias, gráficos o análisis específicos, y no conoces la tabla o ID, DEBES llamar primero a la herramienta `get_catalogo_datos` para identificar el dataset correspondiente en el catálogo.
+84: - Inmediatamente después de obtener la lista del catálogo, debes analizarla, seleccionar la tabla idónea (ej: `CMO_TX_CENTRAL_GEN` para centrales o empresas eléctricas, `VW_EESS_UBICACION_GEO` para estaciones de servicio, etc.), llamar a `get_detalle_catalogo_datos` para ver sus columnas, y luego ejecutar `query_data` con los filtros correspondientes (ej: `filters: {"NO_DEPARTAMENTO": "HUANUCO"}`).
+85: - Todo este flujo de llamadas a herramientas (`get_catalogo_datos` -> `get_detalle_catalogo_datos` -> `query_data`) debe ser ejecutado en forma continua y encadenada en un solo turno, sin detenerse a preguntarle nada al usuario, hasta obtener los datos y poder responderle con la respuesta final.
+86: - Queda prohibido inventar o alucinar nombres de tablas, esquemas, columnas o IDs de catálogo. Búscalos siempre mediante las herramientas.
+87: 
+88: 10. AUTONOMÍA EJECUTIVA ABSOLUTA (PROHIBIDO PREGUNTAR DETALLES TÉCNICOS O PEDIR PERMISOS):
+89: - NO le preguntes al usuario si desea que consultes la tabla o si debes ejecutar la herramienta. Procede a realizar la cadena de consultas del catálogo y la base de datos de forma autónoma e inmediata.
+90: - NO le pidas al usuario nombres de columnas, tipos de datos o parámetros de base de datos. Obtén esta información consultando los detalles de la tabla de forma silenciosa.
+91: - El usuario es un gerente/director de negocio y no conoce el modelo de base de datos, por lo que tú debes resolver toda la capa técnica de forma autónoma e interna y entregarle el dato final consultado.
 """
 
 # Configuración de URLs y credenciales
@@ -408,6 +409,41 @@ async def stream_llm_response(messages, tools=None):
     # Clonar y adaptar mensajes dinámicamente con contexto de datos e filtros activos
     injected_messages = list(messages)
     
+    # 0. Limpiar y aplanar el historial de turnos pasados finalizados
+    # Eliminamos las llamadas a herramientas y volcados de datos anteriores para evitar
+    # errores de compatibilidad (como INVALID_ARGUMENT 400 en Gemini) y optimizar tokens.
+    cleaned_messages = []
+    if len(injected_messages) > 0:
+        cleaned_messages.append(injected_messages[0]) # System prompt
+        chat_history = injected_messages[1:]
+        
+        # Encontrar el índice del último mensaje del usuario (inicio del turno actual)
+        last_user_idx = -1
+        for i in range(len(chat_history) - 1, -1, -1):
+            if chat_history[i].get("role") == "user":
+                last_user_idx = i
+                break
+                
+        if last_user_idx != -1:
+            past_history = chat_history[:last_user_idx]
+            current_turn = chat_history[last_user_idx:]
+            
+            cleaned_past = []
+            for msg in past_history:
+                role = msg.get("role")
+                content = msg.get("content")
+                if role == "user":
+                    cleaned_past.append({"role": "user", "content": content})
+                elif role == "assistant" and content:
+                    cleaned_past.append({"role": "assistant", "content": content})
+            
+            cleaned_messages.extend(cleaned_past)
+            cleaned_messages.extend(current_turn)
+        else:
+            cleaned_messages.extend(chat_history)
+            
+    injected_messages = cleaned_messages
+    
     # 1. Inyectar Filtros Activos de la Sesión
     filtros_activos = cl.user_session.get("filtros_activos")
     if filtros_activos and len(injected_messages) > 0:
@@ -513,14 +549,20 @@ async def stream_llm_response(messages, tools=None):
                 }
                 if tools:
                     kwargs["tools"] = tools
+                    kwargs["parallel_tool_calls"] = False
                     
                 try:
                     stream = await client.chat.completions.create(**kwargs)
                 except Exception as inner_e:
+                    print(f"[BACKEND DEBUG] Falló completions para {model}. Error: {inner_e}")
                     # Si el modelo/proveedor no soporta stream_options, reintentar sin eso
                     if "stream_options" in kwargs:
                         del kwargs["stream_options"]
-                        stream = await client.chat.completions.create(**kwargs)
+                        try:
+                            stream = await client.chat.completions.create(**kwargs)
+                        except Exception as inner_e2:
+                            print(f"[BACKEND DEBUG] Reintento sin stream_options también falló para {model}: {inner_e2}")
+                            raise inner_e2
                     else:
                         raise inner_e
                         
@@ -1003,6 +1045,7 @@ async def main(message: cl.Message):
     print(f"\n[BACKEND] --- ON MESSAGE TRIGGERED --- Content: {message.content!r}")
     # Mantener el resultado de herramientas de turnos anteriores para permitir graficar datos persistentes
     cl.user_session.set("chart_generated_in_turn", False)
+    catalogo_consultado_en_este_turno = False
     clean_query = message.content.strip().lower()
     
     # Recuperar variables de la sesión
@@ -1138,6 +1181,8 @@ async def main(message: cl.Message):
                         
                         # Llamar localmente al servidor de Osinergmin
                         result = run_local_tool(MCP_SERVER_URL, name, args)
+                        if name == "get_catalogo_datos":
+                            catalogo_consultado_en_este_turno = True
                         print(f"[BACKEND] Tool {name!r} returned output of length: {len(str(result))} (sample: {str(result)[:200]}...)")
                         
                         # Mostrar resultados en la UI
@@ -1210,34 +1255,80 @@ async def main(message: cl.Message):
                             ).send()
                         
             # --- DETECCIÓN Y GENERACIÓN AUTOMÁTICA DE DATASETS ---
-            last_tool_run = None
-            if history:
-                for h in reversed(history):
-                    if h.get("role") == "tool":
-                        last_tool_run = h.get("name")
+            # 1. Obtener la lista completa de tablas del catálogo que tengamos en sesión
+            catalogo_completo = cl.user_session.get("last_tool_result")
+            if not isinstance(catalogo_completo, list):
+                # Fallback al mock local si no se ha cargado el catálogo aún
+                catalogo_completo = get_mock_tool_response("get_catalogo_datos", {})
+                
+            # 2. Buscar menciones de tablas en el texto final de la respuesta del asistente (full_text)
+            import re
+            content_text = full_text or ""
+            
+            # Extraer posibles palabras en mayúsculas
+            palabras = re.findall(r'\b[A-Z0-9_]{5,}\b', content_text)
+            palabras = list(dict.fromkeys(palabras))
+            
+            # Extraer números de 4 dígitos (posibles IDs de catálogo)
+            numeros = re.findall(r'\b\d{4}\b', content_text)
+            numeros = list(dict.fromkeys(numeros))
+            
+            datasets_list = []
+            tablas_agregadas = set()
+            
+            # A) Buscar por coincidencia de ID_CATALOGO_DATO
+            for num in numeros:
+                try:
+                    num_int = int(num)
+                    for item in catalogo_completo:
+                        id_catalogo = item.get("ID_CATALOGO_DATO")
+                        if id_catalogo is not None:
+                            try:
+                                if int(id_catalogo) == num_int:
+                                    name_in_item = item.get("NO_TABLA") or item.get("table_name") or item.get("name") or ""
+                                    if name_in_item and name_in_item.upper() not in tablas_agregadas:
+                                        table_name = name_in_item
+                                        description = item.get("DE_TABLA") or item.get("description") or item.get("desc") or "Tabla de datos de Osinergmin."
+                                        datasets_list.append({
+                                            "title": table_name,
+                                            "description": description,
+                                            "format": "SQL Table",
+                                            "license": "Osinergmin",
+                                            "organization": "Gobernanza de Datos"
+                                        })
+                                        tablas_agregadas.add(name_in_item.upper())
+                                        break
+                            except ValueError:
+                                pass
+                except ValueError:
+                    pass
+            
+            # B) Buscar coincidencia exacta con tablas del catálogo real (por nombre)
+            for palabra in palabras:
+                for item in catalogo_completo:
+                    name_in_item = item.get("NO_TABLA") or item.get("table_name") or item.get("name") or ""
+                    if name_in_item and name_in_item.upper() == palabra.upper() and name_in_item.upper() not in tablas_agregadas:
+                        table_name = name_in_item
+                        description = item.get("DE_TABLA") or item.get("description") or item.get("desc") or "Tabla de datos de Osinergmin."
+                        datasets_list.append({
+                            "title": table_name,
+                            "description": description,
+                            "format": "SQL Table",
+                            "license": "Osinergmin",
+                            "organization": "Gobernanza de Datos"
+                        })
+                        tablas_agregadas.add(name_in_item.upper())
                         break
                         
-            if last_tool_run == "get_catalogo_datos" and isinstance(last_result, list) and len(last_result) > 0:
-                datasets_list = []
-                for item in last_result:
-                    table_name = item.get("table_name") or item.get("name") or "Tabla"
-                    description = item.get("description") or item.get("desc") or "Catálogo de datos."
-                    datasets_list.append({
-                        "title": table_name,
-                        "description": description,
-                        "format": "SQL Table",
-                        "license": "Osinergmin",
-                        "organization": "Gobernanza de Datos"
-                    })
-                    
-                if datasets_list:
-                    datasets_block = f"\n\n```json-datasets\n{json.dumps(datasets_list, ensure_ascii=False, indent=2)}\n```"
-                    if msg:
-                        msg.content += datasets_block
-                        await msg.update()
-                    else:
-                        await cl.Message(
-                            content="Aquí están los conjuntos de datos gobernados encontrados en el catálogo:" + datasets_block,
-                            author=f"Agente ({active_model})"
-                        ).send()
+            # 3. Inyectar el bloque de datasets si encontramos elementos
+            if datasets_list:
+                datasets_block = f"\n\n```json-datasets\n{json.dumps(datasets_list, ensure_ascii=False, indent=2)}\n```"
+                if msg:
+                    msg.content += datasets_block
+                    await msg.update()
+                else:
+                    await cl.Message(
+                        content="Aquí están los conjuntos de datos gobernados encontrados en el catálogo:" + datasets_block,
+                        author=f"Agente ({active_model})"
+                    ).send()
             break

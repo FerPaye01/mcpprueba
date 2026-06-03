@@ -32,6 +32,7 @@ const flattenMessages = (items: any[]): any[] => {
 export default function App() {
   const [inputValue, setInputValue] = useState('');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [importedDatasets, setImportedDatasets] = useState<{ title: string; description: string }[]>([]);
   
   // --- Estado de Filtros Centralizado ---
   const [filters, setFilters] = useState<IFilterState>({
@@ -57,17 +58,25 @@ export default function App() {
   const flatMessages = flattenMessages(messages);
 
   useEffect(() => {
-    if (isReady && !isAuthenticated && !loginLoading) {
-      // Auto-generar un analista aleatorio de Osinergmin e iniciar sesión al instante
-      const prefixes = ['Analista', 'Consultor', 'Fiscalizador', 'Supervisor', 'Coordinador', 'Especialista', 'Auditor'];
-      const randomNum = Math.floor(Math.random() * 900) + 100;
-      const randomName = `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${randomNum}`;
-      
-      handleLogin(undefined, randomName);
-    } else if (isAuthenticated) {
-      connect({ userEnv: {} });
+    if (isReady) {
+      if (isAuthenticated) {
+        const username = user?.display_name || user?.identifier || '';
+        if (username.toLowerCase().includes('solar')) {
+          // Limpiar sesión obsoleta que tiene "solar" del sprint anterior
+          apiClient.logout().then(() => window.location.reload());
+        } else {
+          connect({ userEnv: {} });
+        }
+      } else if (!loginLoading) {
+        // Auto-generar un analista aleatorio de Osinergmin e iniciar sesión al instante
+        const prefixes = ['Analista', 'Consultor', 'Fiscalizador', 'Supervisor', 'Coordinador', 'Especialista', 'Auditor'];
+        const randomNum = Math.floor(Math.random() * 900) + 100;
+        const randomName = `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${randomNum}`;
+        
+        handleLogin(undefined, randomName);
+      }
     }
-  }, [isReady, isAuthenticated, loginLoading]);
+  }, [isReady, isAuthenticated, loginLoading, user]);
 
   const handleLogin = async (e?: React.FormEvent, nameOverride?: string) => {
     if (e) e.preventDefault();
@@ -192,7 +201,7 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-slate-50 text-slate-800 font-sans text-[15px]">
-      <Sidebar connected={connected || false} />
+      <Sidebar connected={connected || false} importedDatasets={importedDatasets} />
 
       {/* Panel Central de Chat */}
       <main className="flex-1 flex flex-col h-full bg-slate-100 p-4 min-w-0">
@@ -298,6 +307,13 @@ export default function App() {
                                                           format={ds.format || 'SQL Table'} 
                                                           license={ds.license || 'Osinergmin'} 
                                                           organization={ds.organization || 'Gobernanza de Datos'}
+                                                          onImport={(title, description) => {
+                                                            setImportedDatasets((prev) => 
+                                                              prev.some(d => d.title === title) 
+                                                                ? prev 
+                                                                : [...prev, { title, description }]
+                                                            );
+                                                          }}
                                                         />
                                                       ))}
                                                     </div>
