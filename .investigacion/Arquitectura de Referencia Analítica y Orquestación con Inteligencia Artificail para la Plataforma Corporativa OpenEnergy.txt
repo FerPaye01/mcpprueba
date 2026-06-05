@@ -1,0 +1,372 @@
+Arquitectura de Referencia Analítica y Orquestación con Inteligencia Artificial para la Plataforma Corporativa OpenEnergy
+Análisis de Casos de Éxito en Business Intelligence, Observabilidad e Interfaces Conversacionales
+La evolución de las plataformas de Business Intelligence (BI) y analítica de datos ha reconfigurado la interacción entre los usuarios finales y los almacenes de información corporativa.[1, 2] Tradicionalmente, la explotación de datos a gran escala dependía de arquitecturas rígidas de extracción, transformación y carga (ETL), orientadas a la preagregación en cubos OLAP multidimensionales.[2] No obstante, el surgimiento de tecnologías de almacenamiento analítico en la nube y la maduración de los modelos de lenguaje (LLM) han propiciado un cambio de paradigma hacia la unificación semántica y la orquestación conversacional.[1, 3]
+Arquitectura General y Flujo de Datos
+Los líderes de la industria analítica adoptan estrategias arquitectónicas diferenciadas según sus casos de uso principales. Las plataformas de BI nativas o consolidadas, como Power BI y Tableau, estructuran su flujo de datos mediante un esquema de almacenamiento híbrido.[2, 4, 5] Permiten la importación de subconjuntos de datos optimizados en motores tabulares en memoria (como el motor de Analysis Services en Power BI o Hyper en Tableau), o la delegación de consultas directas en tiempo real (DirectQuery) al almacén de datos de origen.[4, 5]
+Looker, por su parte, nació bajo una filosofía de base de datos en vivo (in-database), donde no existe persistencia ni replicación de datos en capas propietarias; cada visualización se traduce de forma dinámica a dialectos SQL nativos que se ejecutan directamente en el almacén de datos central.[4] El conector Looker-Power BI, por ejemplo, aprovecha esta arquitectura operando en modo DirectQuery, donde Power BI genera expresiones analíticas Power Query M que la API de Looker traduce en consultas en vivo mediante el plegado de consultas (query folding).[4]
+En el ecosistema de observabilidad, Grafana y Datadog implementan flujos de procesamiento de eventos y series temporales de alta frecuencia. En lugar de estructurar un modelado relacional complejo, estas plataformas optimizan el empuje de filtros y la agregación temporal directamente en bases de datos distribuidas especializadas (como ClickHouse, InfluxDB o Snowflake), priorizando la baja latencia de renderizado frente a la complejidad analítica multidimensional.[6, 7]
+Por su parte, las interfaces puramente conversacionales (ChatGPT, Gemini y Claude) operan sin un almacenamiento analítico persistente de datos.[8, 9] Su arquitectura general se fundamenta en un patrón de orquestación donde el LLM actúa como un procesador lógico central que interactúa con herramientas externas mediante APIs seguras o la implementación del protocolo estandarizado de comunicación Model Context Protocol (MCP).[8, 10] Este protocolo de comunicación transforma los entornos conversacionales de meros generadores de texto a agentes autónomos capaces de descubrir dinámicamente capacidades del sistema, invocar consultas semánticas y recibir conjuntos de datos estructurados listos para su procesamiento.[8, 9]
+El Papel de la Inteligencia Artificial y Capas de Abstracción
+El papel de la inteligencia artificial ha migrado de funciones meramente asistenciales (como la generación de código y fórmulas en Power BI Copilot o Looker con Gemini) a un rol de orquestación analítica activa de extremo a extremo.[11, 12] En las implementaciones de BI tradicionales, el usuario interactúa con Copilot principalmente para acelerar el desarrollo del modelo: refactorizar expresiones DAX en vistas de consulta, documentar descripciones de medidas o sugerir respuestas verificadas basadas en frases detonantes previamente configuradas.[11, 13] Durante este proceso, la plataforma ejecuta una reducción del esquema del modelo semántico para restringir el contexto enviado al LLM, mitigando los límites de tokens de la ventana de contexto de las APIs de inteligencia artificial.[11]
+En un sistema orientado por agentes conversacionales bajo el estándar de Model Context Protocol (MCP), el LLM asume la responsabilidad de descomponer una meta analítica compleja expresada en lenguaje natural, secuenciar las llamadas necesarias, interactuar con los servidores de datos gobernados y estructurar la síntesis de resultados.[8, 14] Para evitar fallos lógicos y de rendimiento en entornos de gran envergadura como el de Osinergmin, la IA no interactúa directamente con los esquemas de tablas físicas de la base de datos.[3, 15] En su lugar, se interpone una capa de abstracción semántica.[1, 3] El modelo semántico (definido mediante especificaciones como LookML en Looker, MetricFlow YAML en dbt o esquemas JS/YAML en Cube) mapea los campos físicos y las relaciones de bases de datos complejas a entidades claras de negocio.[2, 12, 16] Esto permite que la IA consulte APIs semánticas estructuradas utilizando parámetros JSON unificados, impidiendo las alucinaciones analíticas y la formulación de consultas SQL mal optimizadas que degradan el rendimiento de la base de datos.[3, 15, 17]
+Dimensión Técnica
+Power BI [5, 11]
+Tableau [2, 18]
+Looker [4, 12]
+Grafana / Datadog
+ChatGPT / Gemini / Claude [8, 9, 10]
+Arquitectura de Datos
+Motor tabular analítico en memoria (VertiPaq) e importación o DirectQuery a orígenes remotos.
+Motor analítico Hyper en memoria con almacenamiento columnar, extractos o conexiones directas.
+Arquitectura nativa en base de datos. Generación dinámica de SQL en tiempo de ejecución.
+Arquitectura federada con plugins de conexión directa a bases de datos temporales y relacionales.
+Arquitectura sin estado persistente; consumo e interacción dinámica a través de APIs y flujos de RAG.
+Flujo de Datos Analíticos
+Origen → Gateway → Modelado en Power BI Desktop → Servicio en la Nube (Analysis Services).
+Origen → Extracto Hyper o Direct Query → Servidor de Tableau / Cloud.
+Origen → Consulta SQL en vivo mediante Looker Explore → Renderizado en Interfaz Web.
+Origen temporal/métrica → Consulta directa optimizada → Streaming y renderizado local.
+Conversación del usuario → Invocación de herramientas (MCP) → Retorno de datos → LLM.
+Papel de la IA
+Copilot generador de DAX, resúmenes narrativos, explicaciones de esquemas y medidas analíticas.
+Tableau Pulse para exploración autónoma y generación conversacional de resúmenes de KPIs.
+Duet AI/Gemini para asistencia de código LookML, exploración conversacional y dictado de reportes.
+Generación asistida de consultas complejas (prompts a SQL/PromQL) y correlación de alertas.
+Orquestador analítico central de la sesión de exploración del usuario mediante llamadas de función.
+Generación Visual
+Componentes interactivos nativos cerrados seleccionados heurísticamente por el motor de reporte.
+Lienzo gráfico de alta interactividad basado en marcas visuales propietarias y paneles dinámicos.
+Visualizaciones web nativas parametrizables y mapeadas a los resultados lógicos de LookML.
+Tableros dinámicos basados en paneles WebGL/Canvas de alto rendimiento para series temporales.
+Renderizado HTML nativo, generación dinámica de código ejecutable, y soporte declarativo SVG/JSON.
+Capacidad de Exportación
+Reportes paginados, PDF, PowerPoint, y extracción gobernada a Microsoft Excel.
+Formatos PDF, imágenes estáticas, archivos empaquetados de Tableau y descarga de tablas CSV/Excel.
+PDF, hojas de cálculo de Google (Sheets), CSV, y programaciones automatizadas de envío de datos.
+PDF, imágenes estáticas de paneles (snapshots) y exportación de series temporales en formato CSV.
+Descarga directa de archivos planos (CSV, JSON, TXT) y generación dinámica de PDF vía scripts en sandbox.
+Modelado Semántico
+Definición integrada de relaciones lógicas, jerarquías, clasificaciones y medidas DAX.
+Modelo de datos lógico-físico (relaciones y uniones) acoplado a la estructura del libro de trabajo.
+Código LookML centralizado y versionado en repositorios Git que describe de forma estricta el negocio.
+Ausente. La abstracción semántica se gestiona en las variables de las consultas en cada panel visual.
+No posee modelado nativo. Depende de especificaciones semánticas externas consumidas vía herramientas.
+Capas de Abstracción
+Abstracción basada en vistas de origen, tablas lógicas de datos y medidas del modelo semántico.
+Capa de abstracción de datos virtualizada mediante la interfaz de relaciones de Tableau.
+LookML actúa como un diccionario de datos unificado y seguro que abstrae el SQL del motor de origen.
+Abstracción de orígenes federados mediante una interfaz de consulta común por tipo de base de datos.
+Abstracción modular basada en esquemas de herramientas y definiciones de payloads JSON estructurados.
+Arquitectura de IA y Generación Dinámica de Visualizaciones Declarativas
+Para que un orquestador conversacional de inteligencia artificial genere tableros, rejillas avanzadas y gráficos interactivos de forma dinámica y consistente, es necesario descartar los enfoques de generación imperativa de código de dibujo (como scripts de Javascript crudo utilizando D3.js o Chart.js).[7, 19] La interpretación y ejecución de código imperativo generado por un LLM en el navegador compromete la seguridad de la información gubernamental, abriendo vulnerabilidades de inyección de código de secuencia de comandos en sitios cruzados (XSS).[14, 19]
+Las plataformas analíticas modernas resuelven esta problemática aislando la lógica de representación visual en especificaciones declarativas estructuradas y metamodelos basados en la Gramática de Gráficos (Grammar of Graphics).[14, 19]
+Estándares de Gramática de Gráficos: Vega-Lite y Apache ECharts
+Vega-Lite representa el estándar declarativo idóneo para la generación visual orientada a modelos de lenguaje.[7, 14, 19] Como gramática de gráficos de alto nivel construida sobre Vega, describe las visualizaciones interactivas mediante un esquema JSON conciso y tipado.[20, 21, 22] El LLM no necesita preocuparse por la manipulación directa de elementos en el DOM ni por el cálculo matemático del posicionamiento de los píxeles.[7, 14] Solo debe estructurar un objeto JSON declarativo indicando los mapeos de codificación (encoding) de los datos de entrada a canales visuales (ejes cartesianos, dimensiones temporales, escala de colores) y el tipo de marca visual deseada (barras, líneas, áreas, puntos).[14, 21]
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "description": "Consumo de energía mensual en el mercado regulado peruano por región.",
+  "data": { "name": "aggregated_energy_data" },
+  "mark": { "type": "bar", "tooltip": true },
+  "encoding": {
+    "x": { "field": "mes", "type": "temporal", "timeUnit": "yearmonth", "title": "Mes de Operación" },
+    "y": { "field": "consumo_mwh", "type": "quantitative", "aggregate": "sum", "title": "Energía Consumida (MWh)" },
+    "color": { "field": "region", "type": "nominal", "title": "Región Operativa" }
+  }
+}
+La concisión de Vega-Lite reduce significativamente el volumen de tokens consumidos en el envío de prompts.[14] Otras opciones del mercado, como Apache ECharts o AntV G2, si bien ofrecen un rendimiento sobresaliente en el renderizado mediante Canvas para millones de puntos de datos y una interactividad integrada sumamente fluida en entornos de producción, exigen configuraciones JSON densas y anidadas que elevan la probabilidad de errores de sintaxis o alucinaciones por parte del modelo de lenguaje.[7, 23, 24, 25]
+Impacto Cuantitativo en la Eficiencia y Adopción Analítica
+La adopción de visualizaciones declarativas generadas por agentes inteligentes produce un impacto de mejora medible en el rendimiento empresarial y la satisfacción de los usuarios.[14] Evaluaciones y pilotos analíticos (como los ejecutados por Databricks en colaboración con AstraZeneca utilizando Agent Bricks e integraciones de Vega-Lite) exponen reducciones drásticas en los tiempos de acceso a la información y un incremento sustancial en la autonomía de los analistas no técnicos.[14]
+Podemos formalizar la tasa de ganancia en eficiencia temporal (E 
+vis
+​
+ ) mediante la siguiente relación matemática:
+E 
+vis
+​
+ =(1− 
+T 
+traditional
+​
+ 
+T 
+agent
+​
+ 
+​
+ )×100%
+Donde T 
+traditional
+​
+  representa el tiempo promedio requerido bajo un esquema analítico tradicional (que involucra la formulación manual de consultas SQL por un analista técnico, la exportación del conjunto de datos a formatos planos, la importación en herramientas de escritorio de graficado y la posterior interpretación, estimado típicamente entre 10 y 15 minutos).[14] Por otro lado, T 
+agent
+​
+  describe el tiempo empleado por un agente inteligente conversacional para procesar la intención del usuario, invocar las consultas analíticas optimizadas y renderizar de forma instantánea el componente gráfico declarativo en pantalla (estimado entre 30 y 60 segundos).[14] La aplicación de este modelo arroja una ganancia neta en velocidad analítica de:
+E 
+vis
+​
+ =(1− 
+750 s
+45 s
+​
+ )×100%≈94%
+Esta reducción sustancial del ciclo de exploración de datos impulsa de forma directa la profundidad de los análisis interactivos dentro de una misma sesión analítica.[14] Los flujos analíticos tradicionales restringen la tasa de consultas por sesión a un promedio de 2 o 3 preguntas secuenciales debido al cansancio operativo y las barreras de interfaz.[14] Con la adopción de flujos dinámicos unificados bajo Vega-Lite, los usuarios consiguen realizar entre 8 y 12 consultas analíticas complejas por sesión debido a la retroalimentación visual instantánea.[14]
+Asimismo, la accesibilidad de las representaciones visuales automáticas duplica la adopción de la plataforma por parte de perfiles de negocio no técnicos (elevándola del rango habitual de 30% a 40% hasta niveles de adopción del 70% al 85%), incrementando la satisfacción general con las respuestas analíticas del sistema de un promedio histórico de 3.2/5 a una puntuación media de 4.6/5.[14]
+Ciclos de Validación y Autocorrección Dinámica
+Para garantizar la estabilidad y evitar la visualización de lienzos vacíos o gráficos rotos ante errores de generación de la IA, el sistema debe estructurar una tubería robusta de validación sintáctica y corrección en bucle cerrado [19]:
+Pre-procesamiento semántico y detección de ambigüedades: Un analizador léxico examina la entrada del usuario en lenguaje natural y la asocia a las dimensiones y métricas del modelo semántico.[19] Si el sistema detecta que el usuario solicita nombres de campos ambiguos (por ejemplo, "demanda" en lugar de "consumo_mwh"), el componente de validación aclara la equivalencia antes de instruir al generador visual.[19]
+Validación contra Esquema JSON (JSON Schema Validation): El objeto JSON generado se contrasta de forma inmediata en el servidor o cliente contra el esquema JSON oficial del estándar de Vega-Lite.[19]
+Validación Heurística de Datos: El validador examina de forma programática las relaciones entre los datos agregados obtenidos de la base de datos y la codificación visual declarada, detectando anomalías lógicas (por ejemplo, un filtro de fecha inactivo o el mapeo de variables de texto cualitativo continuo a ejes puramente cuantitativos de escala logarítmica).[19]
+Bucle de Autocorrección Algorítmica: Errores sencillos de tipeo o formateo (como la normalización de fechas expresadas de manera imperativa a la estructura canónica del compilador de Vega-Lite) se solventan algorítmicamente en el backend sin consumir llamadas adicionales al LLM.[19]
+Bucle de Retroalimentación Conversacional (LLM Feedback Loop): Ante fallos críticos de esquema que impiden el renderizado, el sistema captura el rastreo de error sintáctico generado por la biblioteca de validación (por ejemplo, el mensaje de error de compilación de Altair o Vega-Lite) y lo reinyecta automáticamente en un prompt de retroalimentación estructurado al LLM.[19] El modelo de lenguaje lee el log del fallo técnico específico y genera una versión corregida de la especificación declarativa, reduciendo la tasa de fallo de visualización a niveles cercanos a cero en producción.[19]
+Desacoplamiento de Framework y Diseño de Arquitectura Headless
+La migración fluida del prototipo actual en React hacia una infraestructura empresarial madura bajo Angular 19 en el proyecto OpenEnergy requiere un desacoplamiento riguroso de la lógica de procesamiento analítico respecto a la interfaz de usuario. El desarrollo analítico tradicional comete el error de acoplar la lógica de paginación, los estados de ordenación de tablas y las propiedades de transformación de datos dentro del ciclo de vida y las APIs propietarias de componentes visuales específicos (como Angular Material o PrimeNG), lo que genera un costoso retrabajo de reescritura al migrar de framework o actualizar componentes.[26, 27]
+El Concepto "Headless" y Motores Reutilizables
+La arquitectura sin cabeza (headless) plantea el aislamiento total de la lógica operacional de datos en un motor agnóstico programado en TypeScript puro.[27, 28] TanStack Table (anteriormente conocido como React Table) constituye la biblioteca de referencia indiscutible para resolver las necesidades analíticas de tablas avanzadas de OpenEnergy.[27, 28] Como motor sin cabeza, TanStack Table no proporciona estilos visuales, etiquetas CSS ni directivas del lado del navegador; gestiona exclusivamente la máquina de estados de la tabla, la ordenación de registros, la estructuración de columnas anidadas, la paginación de datos a gran escala y la virtualización de filas.[27, 28]
+Toda la definición semántica de las columnas analíticas de OpenEnergy se declara utilizando código TypeScript reutilizable:
+import { ColumnDef } from '@tanstack/angular-table';
+
+export interface SectorEnergeticoRow {
+  region: string;
+  generacion_gwh: number;
+  tarifa_promedio: number;
+  estado_operativo: string;
+}
+
+export const columnsDefinition: ColumnDef<SectorEnergeticoRow> =;
+Esta estructura lógicamente aislada permite que el 100% de la lógica de negocio declarada hoy en React pueda trasladarse mañana sin modificaciones a Angular 19.[27, 28] El desarrollador solo debe sustituir la interfaz de presentación (el marcado JSX en React por la sintaxis de plantillas declarativas de Angular 19), preservando intacta la máquina de estados lógicos analíticos.[27, 28, 29]
+Reactividad Optimizada con Angular 19 Signals
+Al migrar a Angular 19, la arquitectura del frontend se beneficia directamente del uso de Signals (Señales).[26, 30] Los sistemas de cambio y detección clásicos de Angular (basados en la interceptación de APIs asíncronas mediante Zone.js) resultan ineficientes al procesar grandes tablas interactivas de millones de filas.[26] Cualquier ordenamiento local o actualización de estado en una celda específica obligaba a reevaluar todo el árbol de componentes de la vista, mermando el rendimiento y generando latencia perceptible en la interacción del usuario.[26]
+Angular 19 solventa esta degradación mediante Signals, un modelo reactivo de granularidad fina que realiza un seguimiento exacto de las dependencias reactivas de los datos lógicos de la tabla.[26, 30] El adaptador @tanstack/angular-table expone una integración directa donde los cambios en la señal de datos disparan de forma puntual y atómica la reevaluación del nodo específico de la celda afectada en el DOM, aislando el rendimiento visual de la complejidad estructural de la página.[26, 29]
+A continuación se presenta un componente de Angular 19 que implementa la definición e integración reactiva de TanStack Table:
+import { ChangeDetectionStrategy, Component, signal, inject, Injector } from '@angular/core';
+import { createAngularTable, FlexRenderDirective, getCoreRowModel } from '@tanstack/angular-table';
+import { columnsDefinition, SectorEnergeticoRow } from './table-definitions';
+
+@Component({
+  selector: 'app-energy-analyst-table',
+  standalone: true,
+  imports:,
+  templateUrl: './energy-table.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class EnergyAnalystTableComponent {
+  private injector = inject(Injector);
+  
+  // Señal reactiva que almacena los datos agregados e interactivos recibidos del modelo semántico
+  public dataSignal = signal<SectorEnergeticoRow>();
+
+  // Instancia reactiva del motor de tablas de TanStack
+  public tableInstance = createAngularTable(() => ({
+    data: this.dataSignal(),
+    columns: columnsDefinition,
+    getCoreRowModel: getCoreRowModel(),
+  }));
+
+  public updateData(newData: SectorEnergeticoRow): void {
+    this.dataSignal.set(newData);
+  }
+}
+La directiva de renderizado en la plantilla declarativa del componente de Angular 19 aprovecha la eficiencia de la reactividad por señales:
+<table class="energy-data-grid">
+  <thead>
+    @for (headerGroup of tableInstance.getHeaderGroups(); track headerGroup.id) {
+      <tr>
+        @for (header of headerGroup.headers; track header.id) {
+          <th>
+            @if (!header.isPlaceholder) {
+              <ng-container *flexRender="header.column.columnDef.header; props: header.getContext(); let headerCell">
+                {{ headerCell }}
+              </ng-container>
+            }
+          </th>
+        }
+      </tr>
+    }
+  </thead>
+  <tbody>
+    @for (row of tableInstance.getRowModel().rows; track row.id) {
+      <tr>
+        @for (cell of row.getVisibleCells(); track cell.id) {
+          <td>
+            <ng-container *flexRender="cell.column.columnDef.cell; props: cell.getContext(); let cellContent">
+              {{ cellContent }}
+            </ng-container>
+          </td>
+        }
+      </tr>
+    }
+  </tbody>
+</table>
+Para dotar al sistema analítico de capacidades de renderizado de celdas altamente personalizadas (como botones de acción reguladora o indicadores semafóricos de cumplimiento normativo), el adaptador permite inyectar dinámicamente componentes nativos de Angular 19 en las celdas mediante la función flexRenderComponent.[31] Esto facilita una composición modular e interactiva limpia sin introducir acoplamiento físico en las declaraciones de columnas [31]:
+import { Component, inject } from '@angular/core';
+import { injectFlexRenderContext, CellContext } from '@tanstack/angular-table';
+
+@Component({
+  standalone: true,
+  template: `
+    <span class="badge" [class.success]="context.getValue() === 'Activo'">
+      {{ context.getValue() }}
+    </span>
+  `
+})
+export class StatusBadgeCellComponent {
+  // Acceso seguro al contexto de renderizado de la celda actual mediante inyección nativa
+  public context = injectFlexRenderContext<CellContext<any, string>>();
+}
+El Dilema del Tamaño del Paquete (Bundle Size Paradox)
+Al evaluar tecnologías de renderizado analítico, los equipos arquitectónicos suelen caer en el análisis sesgado del peso bruto inicial de los paquetes lógicos de las librerías.[27] TanStack Table destaca por la extrema ligereza de su motor central (~15.2 kB de tamaño total).[27] Sin embargo, al tratarse de una tecnología headless pura, carece por definición de estilos CSS, animaciones interactivas, barras de desplazamiento virtualizadas, componentes gráficos de exportación e interfaces de accesibilidad visual.[27]
+El equipo analítico de OpenEnergy debe asumir que el peso real transmitido al usuario final incluirá la suma del motor de TanStack más las cientos de líneas de marcado HTML, controladores CSS de diseño, y dependencias de terceros importadas manualmente para añadir paginación dinámica, scroll virtual y accesibilidad.[27]
+En contraste, soluciones empresariales empaquetadas de alto rendimiento (como AG Grid o Syncfusion Angular Charts) integran estos componentes optimizados bajo un único paquete optimizado nativamente para la sacudida de ramas de código inactivo (tree-shaking), lo que suele producir un menor tamaño final de paquete web compilado y reduce drásticamente las horas de mantenimiento asociadas al código de maquetación propio.[23, 27]
+Web Components y Angular Elements como Estrategia de Migración
+La migración paulatina de OpenEnergy desde el prototipo en React hacia Angular 19 sin interrumpir la operación del servicio analítico se consigue utilizando Angular Elements (@angular/elements).[32, 33, 34] Esta tecnología empaqueta componentes de Angular 19 (incluyendo sus dependencias, servicios lógicos de inyección e interfaces reactivas por Signals) como Custom Elements nativos del navegador, exponiendo etiquetas HTML estándar compatibles con cualquier framework o marcado web estático.[32, 34]
+Este patrón híbrido permite construir las nuevas tablas y componentes visuales analíticos avanzados en Angular 19 y desplegarlos en el contenedor actual de React como elementos estándar del navegador:
+import { createCustomElement } from '@angular/elements';
+import { bootstrapApplication } from '@angular/platform-browser';
+import { inject, Injector } from '@angular/core';
+import { EnergyAnalystTableComponent } from './app/energy-table.component';
+
+(async () => {
+  const appRef = await bootstrapApplication(EnergyAnalystTableComponent);
+  const injector = appRef.injector;
+  
+  // Transformación del componente de Angular 19 en un Custom Element compatible con la W3C
+  const customGridElement = createCustomElement(EnergyAnalystTableComponent, { injector });
+  customElements.define('openenergy-advanced-grid', customGridElement);
+})();
+De este modo, los analistas de OpenEnergy interactúan en el frontend con el contenedor de React, el cual renderiza el nuevo componente de Angular empaquetado bajo la etiqueta <openenergy-advanced-grid> de manera transparente y sin duplicación de dependencias en tiempo de ejecución.[32, 33]
+La adopción de este patrón híbrido en microfrontends desvela tres desafíos de integración crítica que deben mitigarse de forma explícita en la arquitectura del sistema:
+La Trampa del Enrutador (The Router Trap): Al instanciar un componente de Angular empaquetado como Custom Element, la inicialización del sistema mediante createApplication() ejecuta de forma automática todos los tokens asíncronos declarados en APP_INITIALIZER.[33] Entre ellos se encuentra la configuración de enrutamiento inicial del sistema, la cual se detona de forma inmediata antes de que la etiqueta contenedora del Web Component haya sido montada físicamente en el DOM del navegador por el host de React.[33] Al no encontrar la etiqueta contenedora <router-outlet>, el enrutador de Angular asume un éxito vacío de navegación y cesa sus ciclos de actualización.[33] La corrección analítica exige deshabilitar el ciclo de navegación automática inicial en la declaración de rutas de Angular y forzar explícitamente el inicio del recorrido de navegación únicamente durante el ciclo de vida de montaje físico en el DOM (ngOnInit) [33]:
+Conflicto de Ubicación y Control de Rutas (WebComponentLocationStrategy): Al coexistir dos routers analíticos (el de la aplicación host en React y el enrutador propio del Web Component de Angular Elements), ambos intentarán interactuar de forma simultánea con la barra de direcciones de navegación del navegador (window.location), corrompiendo el historial de navegación y rompiendo el flujo de navegación analítico de la plataforma.[33] La arquitectura debe implementar una estrategia de navegación en memoria desacoplada (WebComponentLocationStrategy o MemoryRouting) en el componente de Angular Elements, asegurando que la navegación interna del módulo analítico no interfiera con el control del navegador administrado por el portal host de React.[33, 35]
+Aislamiento y Mitigación de Colisión Estilística: Al empaquetar el componente mediante Angular Elements, es crítico activar la encapsulación nativa del Shadow DOM (ViewEncapsulation.ShadowDom) en el componente analítico raíz.[33, 35] Esto crea una frontera dura de estilos que impide que las reglas de diseño globales del framework host de React (como clases utilitarias de Tailwind o Bootstrap) interfieran con el diseño visual corporativo del componente en Angular.[33, 35] No obstante, esto bloquea de forma colateral la herencia de fuentes web corporativas, estilos de iconos y temas compartidos de diseño.[33] Para solucionar este aislamiento, el componente analítico debe importar explícitamente el núcleo de hojas de estilo corporativo de Osinergmin dentro de su propia declaración local de recursos estilísticos.[33]
+Modelo de Datos Unificado de Extremo a Extremo
+Para una plataforma gubernamental de la envergadura de OpenEnergy, es prioritario garantizar la absoluta consistencia de la información presentada a los reguladores, directivos y analistas del mercado energético.[1, 5] La aproximación convencional de desarrollo analítico que acopla consultas SQL directas o fórmulas lógicas matemáticas dentro de componentes visuales frontend independientes adolece de problemas graves de reconciliación de datos.[1, 6] Si la fórmula de cálculo de la tarifa promedio de energía o de la eficiencia de distribución hidrocarburífera se duplica de forma manual en la especificación del gráfico de Vega-Lite, en el controlador de la rejilla de TanStack Table y en las instrucciones de síntesis del agente conversacional de IA, cualquier cambio metodológico obliga a un ciclo masivo de mantenimiento y abre la puerta a discrepancias numéricas críticas.[1, 6]
+La arquitectura del sistema OpenEnergy debe consolidar un flujo analítico unidireccional y centralizado gobernado de extremo a extremo por un Modelo de Datos Unificado:
+Origen de Datos (Snowflake / Databricks)→Modelo Sem 
+a
+ˊ
+ ntico Centralizado (Cube)→AI Orquestadora (MCP / JSON-RPC)→Capas L 
+o
+ˊ
+ gicas Headless (TanStack / Vega-Lite)→Componentes de Visualizaci 
+o
+ˊ
+ n e Informe (PNG / SVG / Excel / PDF)
+Arquitectura de Capas Semánticas: Enfoque Standalone frente a Warehouse-Native
+Al plantear la unificación del modelo semántico de OpenEnergy, la arquitectura debe evaluar los dos caminos dominantes de la ingeniería analítica moderna:
+Modelo Semántico Standalone (Cube Cloud / dbt Semantic Layer): En este patrón, el modelo semántico opera como un componente arquitectónico independiente intermedio que reside entre el almacén de datos (Data Warehouse) y los diferentes canales de visualización y consulta conversacional.[2, 6, 36] Cube se destaca en este escenario al exponer una capa semántica de alto rendimiento totalmente agnóstica respecto a la base de datos de origen.[2, 36, 37] Su mayor fortaleza analítica reside en su pre-procesador de consultas, la gestión de caché inteligente y la generación automática de pre-agregaciones analíticas parametrizables que reducen el tiempo de respuesta a niveles menores a un segundo, protegiendo al motor de base de datos de la concurrencia masiva asociada a las consultas interactivas del frontend.[2, 36, 38] Asimismo, proporciona múltiples conectores estandarizados (SQL, REST, GraphQL, MDX y DAX), facilitando el consumo simultáneo por parte del motor de IA, herramientas de BI clásicas y aplicaciones web a la medida.[2, 36, 39]
+Modelo Semántico Warehouse-Native (Snowflake Semantic Views / Databricks Unity Catalog): Esta aproximación abandona la necesidad de desplegar y mantener un servidor intermedio dedicado, declarando las entidades, uniones de negocio y medidas semánticas directamente como objetos lógicos optimizados dentro del propio motor del almacén de datos (como las vistas semánticas de Snowflake Cortex Analyst).[6, 10]
+Este patrón simplifica significativamente la infraestructura analítica y optimiza la seguridad del sistema al unificar el modelo de control de accesos basado en roles (RBAC) de la propia base de datos, evitando latencias de red y saltos de infraestructura (network hops).[6] Las consultas lógicas generadas se procesan nativamente en el optimizador físico del motor analítico (como el compilador Catalyst, el motor vectorizado Photon en Databricks o la poda de micro-particiones en Snowflake), garantizando la ejecución de joins con un rendimiento equivalente a la escritura de código SQL manual experto.[6]
+                                  +-----------------------+
+                                  |   Atlan Context L.    |
+                                  | - Ownership & Lineage |
+                                  | - Data Governance     |
+                                  | - Access Policies     |
+                                  +-----------------------+
+                                              |
+                                              | Enriquecimiento de
+                                              | Contexto vía Atlan MCP
+                                              v
++-----------------------+         +-----------------------+         +-----------------------+
+|  Orquestador de IA    |  MCP    |  Servidor MCP (Cube)  |  SQL    |    Almacén de Datos   |
+|   (Agent conversac.)  |<=======>| - Modelado Semántico  |<=======>|      (Snowflake)      |
+|  - Claude 3.5 Sonnet  |         | - Pre-aggregations    |         |  - Micro-partitioning |
++-----------------------+         +-----------------------+         +-----------------------+
+El Rol Crítico de la Capa de Contexto (Context Layer)
+Por encima de las definiciones matemáticas operadas por el modelo semántico, las necesidades gubernamentales de un organismo regulador exigen la incorporación de una Capa de Contexto (Context Layer).[16] El modelo semántico describe qué se calcula y cómo se calcula (por ejemplo, definiendo la ecuación analítica del margen de distribución del gas natural).[1, 16] La capa de contexto (gestionada de forma óptima mediante herramientas de metadatos activos como Atlan) describe las dimensiones operativas, de cumplimiento y de propiedad que la inteligencia artificial requiere para tomar decisiones seguras en el mundo real.[16]
+La capa de contexto enriquece el modelo semántico aportando cuatro pilares críticos [16]:
+Trazabilidad y Linaje de Datos de Extremo a Extremo (Data Lineage): Permite al agente conversacional de IA rastrear e informar con precisión el origen y las transformaciones sufridas por una métrica analítica (por ejemplo, indicar al regulador de Osinergmin que la cifra de "consumo_mwh" mostrada en el gráfico proviene de consolidar tres tablas transaccionales específicas a través de cuatro modelos dbt históricos).[16]
+Gobernanza y Certificación de Métricas: Atribuye metatags y estados de validación a los objetos lógicos ("Métrica Oficial Certificada por Gerencia de Regulación Tarifaria"), permitiendo al orquestador de IA filtrar de forma proactiva métricas experimentales o tablas de borrador descartando alucinaciones corporativas.[16]
+Glosarios de Negocio Enriquecidos y Ontologías: Conecta sinónimos y resuelve conflictos de identidad semántica multiplataforma (mapeando de forma inequívoca que los términos analíticos "compañía distribuidora", "empresa concesionaria" y "proveedor de servicio" refieren lógicamente a la misma entidad estructural de negocio).[16]
+Políticas de Enrutamiento y Disambiguación Operativa: Proporciona instrucciones explícitas de negocio (por ejemplo, indicar al LLM que para resolver dudas sobre tarifas vigentes de distribución eléctrica debe utilizar de forma obligatoria las tablas certificadas de la dirección técnica tarifaria, bloqueando el acceso a registros preliminares).[16]
+Esta capa se expone directamente al orquestador conversacional utilizando la especificación de Model Context Protocol (como el Atlan MCP Server), logrando incrementar la fiabilidad analítica del agente y alcanzando hasta un 3x en la precisión y exactitud de consultas conversacionales con un nivel de confianza superior al 95%.[16]
+Seguridad unificada a Nivel de Objeto, Fila y Columna
+Al tratarse de una plataforma analítica gubernamental de datos sensibles operada por múltiples roles institucionales (directivos de Osinergmin, reguladores tarifarios y analistas externos), la seguridad debe enforzarse como una propiedad intrínseca e inquebrantable de la base de datos analítica.[5, 40, 41]
+El modelo analítico robusto implementa una cadena de decisión de seguridad secuencial en tres compuertas lógicas integradas [40]:
+Control de Acceso a Nivel de Objeto (Object-Level Access Control): Constituye el primer control de acceso de la plataforma.[40] Determina basándose en el rol del usuario (Role-Based Access Control, RBAC) si la identidad del usuario tiene autorizaciones estructurales para realizar cualquier consulta o exploración analítica sobre la base de datos o el modelo semántico del sector en cuestión (por ejemplo, denegar al analista externo el acceso al modelo de auditoría interna de concesiones).[40] Si la evaluación es negativa, el proceso de consulta analítica se detiene de forma inmediata en el servidor sin procesar datos ni consumir recursos de cómputo.[40]
+Control de Acceso a Nivel de Fila (Row-Level Security, RLS): Una vez autorizada la exploración del recurso analítico, la seguridad a nivel de fila restringe de forma dinámica la visibilidad del conjunto de datos devuelto.[40, 41] Utilizando variables y funciones contextuales en tiempo de ejecución (como USERPRINCIPALNAME() en Power BI o consultas a tablas de mapeo seguro en Cube), el sistema evalúa la identidad o ubicación geográfica del regulador.[5, 18, 42] El motor semántico reescribe internamente la consulta de origen inyectando predicados restrictivos lógicos antes de la ejecución física de la consulta en Snowflake (por ejemplo, modificando dinámicamente las uniones analíticas para forzar la cláusula WHERE region = 'Arequipa').[18, 42] El analista de una región o área geográfica específica solo recibe las filas correspondientes a su jurisdicción, lo cual neutraliza cualquier posibilidad de fuga colateral de información.[18, 40] Este filtrado estricto e inalterable se aplica directamente en el motor analítico de base, garantizando que el usuario solo pueda visualizar, graficar o exportar los datos lógicos explícitamente autorizados por sus privilegios.[5]
+Control de Acceso a Nivel de Columna (Column-Level / Field-Level Security, CLS): Protege contra la exposición accidental de información de carácter confidencial o atributos identificativos (como el DNI de usuarios residenciales de baja potencia o identificadores financieros de transacciones bancarias entre empresas del sector eléctrico).[40] La capa semántica aplica reglas dinámicas de enmascaramiento o anonimización de datos (data masking) sobre las dimensiones analíticas lógicas, ocultando la columna física mediante valores cifrados o impidiendo de forma drástica su recuperación en las consultas REST del frontend.[6, 40]
+Roadmap Tecnológico a 5 Años para OpenEnergy
+El diseño arquitectónico de una plataforma analítica avanzada para Osinergmin requiere una planificación temporal clara.[43] El roadmap estratégico de OpenEnergy diferencia las prioridades de adopción tecnológicas inmediatas, aquellas de maduración progresiva a mediano plazo y las decisiones analíticas que deben posponerse para mitigar la acumulación de deuda técnica futura.
+Horizonte Temporal
+Apuestas Tecnológicas Seguras (Adopción Prioritaria)
+Tecnologías en Evaluación (Maduración de Mediano Plazo)
+Decisiones Arquitectónicas a Posponer / Evitar
+Corto Plazo (Año 1) [2, 10, 16, 27, 44]
+* Cube / dbt Semantic Layer: Definición inicial de métricas y uniones energéticas en código YAML versionado.<br>* TanStack Table: Lógica analítica de rejillas de datos en React utilizando estructuras ColumnDef agnósticas.<br>* Vega-Lite & vega-embed: Generación de gráficos declarativos interactivos vía especificaciones JSON estables.<br>* TypeScript MCP SDK: Desarrollo nativo de servidores Model Context Protocol para el mapeo semántico de la IA.
+* Orquestación conversacional mediante integración de LLMs de frontera (Claude 3.5 Sonnet o GPT-4o) bajo esquemas de RAG guiados exclusivamente por la API REST del modelo semántico.
+* Motores gráficos imperativos propietarios acoplados en frontend.<br>* Desarrollo de flujos directos text-to-SQL analíticos expuestos a la base de datos sin capa de abstracción semántica interpuesta.<br>* Migración de framework analítico completa en la fase de prototipo de diseño.
+Mediano Plazo (Años 2-3) [26, 29, 32, 33, 34, 45]
+* Angular 19/20 Signals: Implementación nativa de la reactividad fina y zoneless del frontend para mejorar el rendimiento de renderizado.<br>* Angular Elements: Empaquetamiento y exportación progresiva de componentes dinámicos como Custom Elements compatibles con React 19.<br>* Pre-aggregations en Cube: Activación de caché analítica analítica de doble capa y agregaciones en el almacén de datos.
+* Despliegue de servidores de orquestación de IA y transporte MCP de alta disponibilidad operando bajo canales seguros SSE (Server-Sent Events) sobre HTTP.<br>* Implementación dinámica de RLS y CLS federada.
+* Reescribir la plataforma analítica completa de manera monolítica e integral sin realizar entregables progresivos lógicos.<br>* Utilizar mecanismos de sincronización de estado globales complejos e imperativos basados en observables complejos (RxJS) para la manipulación visual de tablas.
+Largo Plazo (Años 4-5) [16]
+* Active Metadata Context Layers: Adopción e integración de motores de contexto de metadatos (como Atlan) para enriquecer el orquestador de IA.<br>* Open Semantic Interchange (OSI): Adopción de estándares unificados de intercambio semántico para garantizar la portabilidad absoluta de los modelos lógicos de Osinergmin.
+* Agentes inteligentes conversacionales analíticos de ejecución autónoma guiados por orquestación semántica enriquecida de forma directa por capas de contexto de metadatos activos.
+* Desarrollar o entrenar modelos fundacionales de lenguaje (LLMs) propios para analítica de datos energéticos desde cero.<br>* Adopción de plataformas de BI propietarias cerradas que limiten el desacoplamiento analítico de Osinergmin.
+Justificación Estratégica del Roadmap
+Inmediato (Año 1): El foco prioritario absoluto de OpenEnergy es consolidar la capa del modelo semántico y la capa analítica headless de visualización.[2, 27] Mantener la lógica semántica aislada en Cube y el graficado bajo Vega-Lite garantiza que el prototipo de React funcione como un lienzo de renderizado ligero de especificaciones declarativas lógicas de bajo peso en tokens.[14, 36] La adopción del estándar de Model Context Protocol (MCP) en TypeScript hoy es la apuesta segura que prepara la plataforma para integrarse con cualquier agente inteligente conversacional del mercado de forma estándar.[8, 10]
+Mediano Plazo (Años 2-3): Con la maduración y consolidación de la capa semántica de datos, se detona de manera controlada la migración hacia Angular 19.[26, 32] El uso de Angular Elements permite exportar las vistas analíticas de Angular 19 de forma modular, permitiendo que coexistan de forma transparente en el portal host de React 19 y posibilitando una transición sin riesgos de parada analítica para los reguladores del sector.[33, 35, 46] La activación de señales reactivas (Signals) y las pre-agregaciones en Cube optimiza el rendimiento del sistema analítico frente al incremento en la escala de consultas y volumen de usuarios.[2, 26]
+Largo Plazo (Años 4-5): Tras desactivar por completo el contenedor analítico en React y operar la plataforma de manera nativa y madura bajo Angular, se integra la Capa de Contexto (Context Layer).[16] Incorporar herramientas de metadatos activos sobre el modelo semántico consolidado eleva la fiabilidad y precisión del orquestador conversacional de IA de Osinergmin, alcanzando los niveles más altos de cumplimiento normativo y trazabilidad gubernamental en la generación de reportes e informes institucionales del sector energético.[16, 43]
+Conclusión y Selección Arquitectónica Óptima para OpenEnergy
+Si la plataforma corporativa OpenEnergy fuera construida hoy por un equipo multidisciplinar de arquitectos de software especializados en Inteligencia Artificial, Business Intelligence e infraestructura de datos gubernamentales, elegirían unánimemente una Arquitectura Analítica Semántica Decoupled (Desacoplada) de Estilo Headless y Orquestada por Inteligencia Artificial de Estándar Abierto.
+Componentes de la Arquitectura Seleccionada
+La plataforma OpenEnergy se estructuraría a través de los siguientes componentes analíticos específicos:
+Almacenamiento Analítico de Datos (Data Warehouse): Databricks Lakehouse o Snowflake. Como base de datos analítica analítica de alto rendimiento columnar que procesa y agrega de forma escalable los millones de registros operacionales del sector energético de Osinergmin.[6]
+Modelo Semántico Centralizado (Semantic Layer): Cube Cloud. Como servidor analítico intermedio e independiente interconectado directamente a la base de datos analítica.[2, 36] Cube gestiona de forma centralizada la lógica semántica de negocio en código versionado Git, enforza las políticas de Row-Level Security (RLS) dinámicas y optimiza el rendimiento del sistema analítico mediante la gestión avanzada de almacenamiento en caché y la estructuración automática de tablas de pre-agregación.[2, 38, 42]
+Capa de Orquestación y Conectividad de IA: Servidor MCP en TypeScript. La inteligencia artificial de frontera (Claude 3.5 Sonnet u OpenAI GPT-4o) opera exclusivamente como un motor lógico conversacional asíncrono.[8, 15] No interactúa directamente con los esquemas de bases de datos relacionales ni genera sentencias SQL propietarias.[15, 17] En su lugar, utiliza el cliente estándar de Model Context Protocol (MCP) desarrollado en TypeScript para descubrir las métricas lógicas de Osinergmin y formular consultas semánticas declarativas parametrizadas en JSON directamente a la API REST unificada de Cube.[10, 15, 47]
+Capa Analítica de Rejillas Headless (Tablas): TanStack Table. Controla y unifica de forma exclusiva la máquina de estados analíticos, la paginación gobernada remota de datos agregados de Cube y la clasificación local, de forma agnóstica respecto al framework visual de frontend.[27, 28] Su arquitectura ligera basada en definiciones de columnas lógicas estándar de TypeScript facilita una portabilidad absoluta en la transición del prototipo de React actual hacia la aplicación empresarial final nativa de Angular 19.[27, 28, 29]
+Capa Analítica de Visualización Gráfica: Vega-Lite. El orquestador conversacional de IA traduce la intención exploratoria del regulador en una especificación declarativa compacta JSON bajo el estándar de Vega-Lite.[14] La biblioteca de renderizado vega-embed procesa la especificación del lado del navegador sobre Canvas de alto rendimiento, evitando la ejecución insegura de código imperativo Javascript y proporcionando interactividad robusta y exportaciones de alta resolución unificadas.[14, 19, 22]
+Framework Visual y Reactividad: Angular 19 Standalone con Signals. La aplicación empresarial final de OpenEnergy se ejecuta bajo un ecosistema corporativo e institucional zoneless nativo en Angular 19.[26, 30] El flujo y control de actualización visual se opera mediante Signals de granularidad fina, reduciendo drásticamente la latencia de renderizado frente a la concurrencia analítica de datos.[26] La migración progresiva e híbrida del prototipo de React actual se efectúa empaquetando modularmente los nuevos componentes avanzados desarrollados de Angular Elements como Web Components estándar del navegador.[32, 34]
+Justificación Técnica de la Selección
+Eliminación Absoluta de Hallucinaciones Analíticas: Al impedir que la IA formule código SQL de origen de forma directa sobre la base de datos física, y forzar la interacción exclusiva con la capa del modelo semántico de Cube estructurada mediante variables lógicas gobernadas, se garantiza la total consistencia matemática del cálculo de las tarifas y datos de suministro de energía de Osinergmin.[3, 15, 17]
+Consistencia e Inmutabilidad Analítica Unificada: Al estar acopladas las tablas de TanStack Table, las visualizaciones de Vega-Lite y los reportes formales de exportación de la plataforma OpenEnergy bajo el mismo flujo de datos y modelo semántico analítico centralizado, se elimina la posibilidad de discrepancia numérica o inconsistencia metodológica en las respuestas mostradas en los diferentes módulos del sistema.[1, 2]
+Máximo Rendimiento bajo Concurrencia de Usuarios: La gestión de caché de doble capa y pre-agregaciones lógicas operada por Cube protege al almacén de datos (Snowflake) de la sobrecarga de consultas generadas por la IA o interacciones de filtrado local de los analistas.[2, 38] Los datos agregados clave se resuelven en milisegundos en el servidor analítico intermedio, garantizando la fluidez de respuesta analítica sin disparar los costos operativos de infraestructura.[2, 38]
+Gobernanza Gubernamental y Seguridad de Información Segura: El enforzamiento dinámico de políticas de Row-Level Security (RLS) y Column-Level Security (CLS) directamente en la capa de datos o modelo semántico garantiza el cumplimiento estricto de las normativas de protección de información.[5, 6, 41] Al procesarse las consultas analíticas de la IA mediante este filtro de seguridad unificado, se inhabilita cualquier posibilidad de que un usuario manipule parámetros lógicos o use inyecciones de prompts conversacionales para eludir los accesos restringidos y ver información confidencial no autorizada de la plataforma OpenEnergy.[5, 45]
+--------------------------------------------------------------------------------
+Semantic Layer Architecture: Components, Design Patterns, and AI Integration - Databricks, https://www.databricks.com/blog/semantic-layer-architecture-components-design-patterns-and-ai-integration
+Semantic Layer: The Definitive Guide - DEV Community, https://dev.to/alexmercedcoder/semantic-layer-the-definitive-guide-5h6i
+Semantic Layer: The Backbone of AI-powered Data Experiences - Cube Blog, https://cube.dev/blog/semantic-layer-the-backbone-of-ai-powered-data-experiences
+Looker–Power BI Connector | Google Cloud Documentation, https://docs.cloud.google.com/looker/docs/powerbi-connector
+Row-Level Security in Power BI, https://powerbiconsulting.com/blog/power-bi-row-level-security
+Semantic Layer Architectures: Warehouse vs dbt vs Cube - Typedef, https://www.typedef.ai/resources/semantic-layer-architectures-explained-warehouse-native-vs-dbt-vs-cube
+The Ultimate Guide to the Vega-Lite MCP Server: Turn Your AI into a Data Visualization Pro, https://skywork.ai/skypage/en/vega-lite-mcp-server-data-visualization/1980471103827070976
+What is the Model Context Protocol (MCP)? - Databricks, https://www.databricks.com/blog/what-is-model-context-protocol
+What is Model Context Protocol (MCP)? A guide | Google Cloud, https://cloud.google.com/discover/what-is-model-context-protocol
+Snowflake-managed MCP server, https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp
+Use Copilot with Semantic Models in Power BI - Microsoft Learn, https://learn.microsoft.com/en-us/power-bi/create-reports/copilot-semantic-models
+Semantic modeling for AI - YouTube, https://www.youtube.com/watch?v=KPy4Cy7eC-8
+Copilot in Power BI Tutorial: Prepare Semantic Model for AI - Microsoft Learn, https://learn.microsoft.com/en-us/power-bi/create-reports/tutorial-copilot-power-bi-prepare-model
+Bringing Visualizations to Life in Multi‑Agent Systems With Vega‑Lite ..., https://www.databricks.com/blog/bringing-visualizations-life-multi-agent-systems-vega-lite
+A Practical Guide to Getting Started with Cube's AI API, https://cube.dev/blog/a-practical-guide-to-getting-started-with-cubes-ai-api
+Best Semantic Layer Tools For BI and AI Agents | Top Picks 2026, https://atlan.com/know/best-semantic-layer-tools/
+Using a semantic layer is the cleanest way to have a human in the loop. A human ... - Hacker News, https://news.ycombinator.com/item?id=43398507
+The Data Bouncer: Explaining Row-Level Security (RLS) and How to Build It 🛡️ - Medium, https://medium.com/@harsh1995hg/the-data-bouncer-explaining-row-level-security-rls-and-how-to-build-it-%EF%B8%8F-6e1e066729d5
+VegaChat: A Robust Framework for LLM-Based Chart Generation and Assessment - arXiv, https://arxiv.org/html/2601.15385v1
+Vega – A Visualization Grammar, https://vega.github.io/vega/
+A High-Level Grammar of Interactive Graphics | Vega-Lite, https://vega.github.io/vega-lite/
+Vega-Lite, https://vega.github.io/
+The Top 5 Most Loved Angular Chart Libraries of 2026 | Syncfusion Blogs, https://www.syncfusion.com/blogs/post/best-angular-chart-libraries
+8 JavaScript Data Visualization Libraries Worth Trying Out - DEV Community, https://dev.to/gnykka/8-javascript-data-visualization-libraries-worth-trying-out-4hll
+Apache ECharts - Hacker News, https://news.ycombinator.com/item?id=43624220
+Built a high-performance, customisable and dev friendly Angular 19 Data Table powered by Signals - Reddit, https://www.reddit.com/r/angular/comments/1qwew1m/built_a_highperformance_customisable_and_dev/
+TanStack Table vs Simple Table: When to Choose Headless vs Batteries-Included, https://www.simple-table.com/blog/tanstack-table-vs-simple-table-headless-batteries-included
+Headless, Mobile-friendly Data Tables with Tanstack Table and React | egghead.io, https://egghead.io/courses/headless-mobile-friendly-data-tables-with-tanstack-table-and-react~hrp4w
+TanStack Table, https://tanstack.com/table/latest
+Angular vs React: A Side-by-Side Comparison & Use Cases - Itransition, https://www.itransition.com/developers/angular-vs-react
+TanStack Table Angular Docs, https://tanstack.com/table/v8/docs/framework/angular/angular-table
+Custom Elements • Angular, https://angular.dev/guide/elements
+From Module Federation to Web Components: The Angular Migration Nobody Warned Me About | by Michael Seemann - Medium, https://medium.com/@mseemann.io/from-module-federation-to-web-components-the-angular-migration-nobody-warned-me-about-967f180caded
+Angular Elements in Angular 19: Creating a Reusable Web Component | by Nilesh Kolhe, https://medium.com/@Nilesh_Kolhe/angular-elements-in-angular-19-creating-a-reusable-web-component-7813ab0f024e
+Web Components in Angular: Integrating React Components Across Framework Boundaries, https://dev.to/ujja/web-components-in-angular-integrating-react-components-across-framework-boundaries-29l5
+Semantic Layer - Cube, https://cube.dev/use-cases/semantic-layer
+JavaScript SDK | Cube documentation, https://cube.dev/docs/product/apis-integrations/javascript-sdk
+LLM & AI Semantic Layer - Cube.dev, https://cube.dev/use-cases/llm-and-ai-semantic-layer
+REST (JSON) API - Cube Documentation, https://docs.cube.dev/reference/core-data-apis/rest-api
+RBAC Security: Field, Row & Object-Level Data Control, https://www.loginradius.com/blog/identity/rbac-data-security-access-control
+What Is Row-Level Security? A Guide to Fine-Tuned Data Access - Teradata, https://www.teradata.com/insights/data-security/what-is-row-level-security
+Implementing row level security on any database - Pyramid Analytics, https://www.pyramidanalytics.com/blog/implementing-row-level-security-on-any-database/
+Osinergmin International, https://www.osinergmin.gob.pe/internacionales/en
+MCP TypeScript SDK for Building Clients and Servers - Stainless, https://www.stainless.com/mcp/mcp-typescript-sdk-for-building-clients-and-servers/
+Chat API | Cube documentation, https://cube.dev/docs/product/apis-integrations/embed-apis/chat-api
+React 19 introduces full support for custom elements. What does it mean for developers?, https://www.reddit.com/r/reactjs/comments/1h88njm/react_19_introduces_full_support_for_custom/
+REST API reference | Cube documentation, https://cube.dev/docs/product/apis-integrations/core-data-apis/rest-api/reference

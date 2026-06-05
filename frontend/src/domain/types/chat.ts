@@ -4,6 +4,8 @@ export interface IDataset {
   format: string;
   license: string;
   organization: string;
+  schema?: string;
+  id_catalogo?: number;
 }
 
 export interface IFilterState {

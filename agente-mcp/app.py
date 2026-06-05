@@ -25,6 +25,8 @@ from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from osam_gateway import execute_osam_query
+from semantic_registry import get_semantic_catalog
 
 # Configuración del Prompt del Sistema institucional
 SYSTEM_PROMPT = """
@@ -210,23 +212,19 @@ def fetch_tools_from_server(base_url):
                 })
             return openai_tools
         else:
-            print(f"Error al listar herramientas: Código {r.status_code}")
-            return []
+            raise RuntimeError(f"Error al listar herramientas del servidor MCP: Código {r.status_code}")
     except Exception as e:
-        print(f"Error conectando al servidor para listar herramientas: {e}")
-        print("MOCK ACTIVADO: El servidor MCP no está corriendo, inyectando herramientas simuladas para que el frontend React funcione.")
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_catalogo_datos",
-                    "description": "Mock tool: Obtiene el catálogo de datos disponibles.",
-                    "parameters": {"type": "object", "properties": {}, "required": []}
-                }
-            }
-        ]
+        raise RuntimeError(f"Fallo crítico de conexión al servidor MCP real en {url}: {str(e)}")
 
 # ----------------- Fallback Resiliente (Mocks Internos de Datos) -----------------
+
+import unicodedata
+
+def normalize_str(text):
+    if not text:
+        return ""
+    nfkd_form = unicodedata.normalize('NFKD', text)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower()
 
 def get_mock_tool_response(name, args, error_detail=None):
     """
@@ -321,7 +319,7 @@ def get_mock_tool_response(name, args, error_detail=None):
             # Filtrar por Departamento
             dep_val = norm_filters.get("departamento") or norm_filters.get("no_departamento") or norm_filters.get("ubicacion")
             if dep_val and dep_val not in ["sede nacional", "todas", "todos"]:
-                filtered = [c for c in filtered if dep_val in c["DEPARTAMENTO"].lower()]
+                filtered = [c for c in filtered if normalize_str(dep_val) in normalize_str(c["DEPARTAMENTO"])]
                 
             # Filtrar por Tecnología
             tec_val = norm_filters.get("tecnologia") or norm_filters.get("ti_matriz") or norm_filters.get("categoria")
@@ -344,7 +342,7 @@ def get_mock_tool_response(name, args, error_detail=None):
             filtered = estaciones
             dep_val = norm_filters.get("departamento") or norm_filters.get("no_departamento") or norm_filters.get("ubicacion")
             if dep_val and dep_val not in ["sede nacional", "todas", "todos"]:
-                filtered = [e for e in filtered if dep_val in e["DEPARTAMENTO"].lower()]
+                filtered = [e for e in filtered if normalize_str(dep_val) in normalize_str(e["DEPARTAMENTO"])]
             return filtered
             
         else: # DEMANDA_DIARIA_ELEC
@@ -392,9 +390,9 @@ def run_local_tool(base_url, name, args):
         if r.status_code == 200:
             return r.json()
         else:
-            return get_mock_tool_response(name, args, f"Error del servidor (código {r.status_code})")
+            raise RuntimeError(f"Error del servidor MCP para la herramienta {name!r} (código {r.status_code}): {r.text}")
     except Exception as e:
-        return get_mock_tool_response(name, args, str(e))
+        raise RuntimeError(f"Fallo crítico de conexión al ejecutar la herramienta MCP {name!r} en {url}: {str(e)}")
 
 # ----------------- Enrutador de Resiliencia del LLM -----------------
 
@@ -456,21 +454,51 @@ async def stream_llm_response(messages, tools=None):
             else:
                 categoria_str = str(categoria)
                 
+            datasets_activos = filtros_activos.get("datasets_activos", [])
+            datasets_info = []
+            for ds in datasets_activos:
+                if isinstance(ds, dict):
+                    table_name = ds.get("table_name") or ds.get("title") or ""
+                    schema = ds.get("schema") or "ES_DATGOB_CV"
+                    id_cat = ds.get("id_catalogo") or 0
+                    datasets_info.append(f"{table_name} (Esquema: {schema}, ID Catálogo: {id_cat})")
+                else:
+                    datasets_info.append(str(ds))
+            
+            datasets_str = ", ".join(datasets_info) if datasets_info else "Ninguno"
+            
+            # Inyectar el Registro Semántico de OpenEnergy
+            catalog = get_semantic_catalog()
+            catalog_str = json.dumps(catalog, indent=2)
+
             filtros_context = (
                 f"\n\nFILTROS ACTIVOS SELECCIONADOS POR EL USUARIO EN EL SIDEBAR:\n"
                 f"- Geografía/Ubicación: {ubicacion}\n"
                 f"- Periodo: {periodo}\n"
                 f"- Matriz Energética (Categorías): {categoria_str or 'Todas'}\n"
-                f"IMPORTANTE: Debes priorizar y restringir tus respuestas y las consultas a base de datos (MCP) "
-                f"usando estas especificaciones (por ejemplo, si la ubicación es Arequipa y no la Sede Nacional, filtra las consultas por "
-                f"el departamento de Arequipa usando el campo `NO_DEPARTAMENTO: 'AREQUIPA'`).\n"
-                f"REGLAS CRÍTICAS DE MAPEO DE FILTROS EN `query_data` PARA LA TABLA `CMO_TX_CENTRAL_GEN` (Centrales):\n"
-                f"- NUNCA uses la columna `DE_FUENTE_ENER` para filtrar por tecnología (ahí se guardan nombres de ríos y descripciones libres, no las tecnologías en mayúsculas).\n"
-                f"- Usa siempre la columna `TI_TIPO_CENTRAL` para filtrar la tecnología/fuente de energía.\n"
-                f"- Si la matriz/categoría seleccionada en el sidebar es 'Solar', filtra usando `TI_TIPO_CENTRAL: 'CENTRAL SOLAR'`.\n"
-                f"- Si la matriz/categoría seleccionada en el sidebar es 'Hidráulica', filtra usando `TI_TIPO_CENTRAL: 'CENTRAL HIDROELECTRICA'` o `TI_TIPO_CENTRAL: 'CENTRAL HIDROELECTRICA RER'`.\n"
-                f"- Si la matriz/categoría seleccionada en el sidebar es 'Eólica', filtra usando `TI_TIPO_CENTRAL: 'CENTRAL EOLICA'`.\n"
-                f"- Para el estado de la central, filtra usando `IN_ESTADO: 'EN SERVICIO'` si el usuario solicita centrales activas, en servicio o operativas.\n"
+                f"- Datasets/Tablas Activos e Importados: {datasets_str}\n"
+                f"\n--- REGISTRO SEMÁNTICO DE OPENENERGY (Métricas y Dimensiones Disponibles) ---\n"
+                f"{catalog_str}\n"
+                f"\n🔴 REGLAS CRÍTICAS DE CONSULTA DE DATOS Y GENERACIÓN DE RESPUESTAS (OSAM v1):\n"
+                f"1. Si el usuario te pide datos, consultas, comparaciones, curvas o gráficos sobre generación, demanda o grifos/estaciones de servicio (EESS), DEBES invocar la herramienta `query_data_osam` pasándole la estructura lógica de `query` y la de `presentation` adecuadas en base al Registro Semántico anterior.\n"
+                f"2. Queda prohibido inventar o alucinar nombres de campos. Usa exactamente los nombres de dimensiones y medidas descritos en el Registro Semántico.\n"
+                f"3. Una vez que `query_data_osam` te retorne el bloque 'report' con los datos reales de DuckDB, redacta tus interpretaciones ejecutivas en texto libre (esta es tu explicación analítica probabilística).\n"
+                f"4. Al final de tu mensaje, DEBES inyectar de forma obligatoria el metamodelo OSAM v1 consolidado dentro de un único bloque de código Markdown marcado con la etiqueta `json-osam`.\n"
+                f"El JSON de `json-osam` debe contener dos propiedades principales:\n"
+                f"  - 'report': El objeto exacto que te devolvió la herramienta `query_data_osam` en su campo 'report'. NUNCA alteres ni inventes los datos de esta sección.\n"
+                f"  - 'analysis': Un objeto conteniendo la propiedad 'insights' que es un array de objetos con las claves 'type' (ej: 'trend', 'comparison') y 'text' (tus conclusiones redactadas).\n"
+                f"Ejemplo de formato de respuesta requerido al final:\n"
+                f"Aquí tienes el análisis... [Tus interpretaciones en texto libre] ...\n"
+                f"```json-osam\n"
+                f"{{\n"
+                f"  \"report\": {{ ... }},\n"
+                f"  \"analysis\": {{\n"
+                f"    \"insights\": [\n"
+                f"      {{ \"type\": \"trend\", \"text\": \"La demanda aumentó un 10%...\" }}\n"
+                f"    ]\n"
+                f"  }}\n"
+                f"}}\n"
+                f"```\n"
             )
             system_msg = dict(injected_messages[0])
             system_msg["content"] = system_msg["content"] + filtros_context
@@ -507,75 +535,64 @@ async def stream_llm_response(messages, tools=None):
     if api_key and (api_key.startswith("AIzaSy") or "gemini" in api_key.lower()):
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
         
-        # Cargar los modelos dinámicamente desde el .env si la variable está definida
+        # Seleccionar un único modelo oficial
         env_models = os.getenv("GEMINI_MODEL")
         if env_models:
-            models = [m.strip() for m in env_models.split(",") if m.strip()]
+            model = [m.strip() for m in env_models.split(",") if m.strip()][0]
         else:
-            models = [
-                "gemini-2.5-flash-lite", 
-                "gemini-2.5-flash"
-            ]
+            model = "gemini-2.5-flash"
         provider_name = "Google AI Studio (Gemini)"
     else:
         base_url = "https://openrouter.ai/api/v1"
-        models = [
-            "deepseek/deepseek-v4-flash:free",
-            "google/gemma-4-31b-it:free",
-            "qwen/qwen3-next-80b-a3b-instruct:free"
-        ]
+        model = "google/gemini-2.5-flash"
         provider_name = "OpenRouter"
 
-    # max_retries=0 desactiva los reintentos automáticos internos de la librería openai (que son rápidos y empeoran el 429)
+    print(f"[BACKEND] Utilizando modelo oficial {model!r} a través de {provider_name}")
+
+    # max_retries=0 desactiva los reintentos automáticos internos de la librería openai
     client = openai.AsyncOpenAI(
         base_url=base_url,
         api_key=api_key,
         max_retries=0
     )
     
-    for idx, model in enumerate(models):
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                if attempt > 0:
-                    # Espera más larga (4 segundos) ante saturación (429) para dejar que se limpie la cuota por segundo/minuto
-                    await asyncio.sleep(4)
-                    
-                kwargs = {
-                    "model": model,
-                    "messages": injected_messages,
-                    "stream": True,
-                    "stream_options": {"include_usage": True}
-                }
-                if tools:
-                    kwargs["tools"] = tools
-                    kwargs["parallel_tool_calls"] = False
-                    
-                try:
-                    stream = await client.chat.completions.create(**kwargs)
-                except Exception as inner_e:
-                    print(f"[BACKEND DEBUG] Falló completions para {model}. Error: {inner_e}")
-                    # Si el modelo/proveedor no soporta stream_options, reintentar sin eso
-                    if "stream_options" in kwargs:
-                        del kwargs["stream_options"]
-                        try:
-                            stream = await client.chat.completions.create(**kwargs)
-                        except Exception as inner_e2:
-                            print(f"[BACKEND DEBUG] Reintento sin stream_options también falló para {model}: {inner_e2}")
-                            raise inner_e2
-                    else:
-                        raise inner_e
-                        
-                return stream, model
-            except Exception as e:
-                is_rate_limit = "429" in str(e) or "rate" in str(e).lower()
-                if is_rate_limit and attempt < max_retries - 1:
-                    continue
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                await asyncio.sleep(4)
                 
-                # Ocultar prints ruidosos a consola, solo reportar el fallo final silencioso
-                if idx == len(models) - 1:
-                    raise e
-                break
+            kwargs = {
+                "model": model,
+                "messages": injected_messages,
+                "stream": True,
+                "stream_options": {"include_usage": True}
+            }
+            if tools:
+                kwargs["tools"] = tools
+                kwargs["parallel_tool_calls"] = False
+                
+            try:
+                stream = await client.chat.completions.create(**kwargs)
+            except Exception as inner_e:
+                print(f"[BACKEND DEBUG] Falló completions para {model}. Error: {inner_e}")
+                if "stream_options" in kwargs:
+                    del kwargs["stream_options"]
+                    try:
+                        stream = await client.chat.completions.create(**kwargs)
+                    except Exception as inner_e2:
+                        print(f"[BACKEND DEBUG] Reintento sin stream_options también falló para {model}: {inner_e2}")
+                        raise inner_e2
+                else:
+                    raise inner_e
+                    
+            return stream, model
+        except Exception as e:
+            is_rate_limit = "429" in str(e) or "rate" in str(e).lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                print(f"[BACKEND WARNING] Rate limit (429) detectado. Reintentando ({attempt+1}/{max_retries})...")
+                continue
+            raise e
 
 # ----------------- Generador Automático de Gráficos -----------------
 
@@ -864,28 +881,44 @@ async def run_local_chart_tool(args):
 
 # ----------------- Autenticación de Usuarios (Login) -----------------
 
+# Diccionario de roles y credenciales válidas para el prototipo (Simulando gobernanza corporativa)
+DICCIONARIO_ROLES = {
+    "gerente.energia@osinergmin.gob.pe": "Gerente de Energía",
+    "analista.mcp@osinergmin.gob.pe": "Analista de Datos MCP",
+    "supervisor.intranet@osinergmin.gob.pe": "Supervisor Corporativo",
+    "admin.openenergy@osinergmin.gob.pe": "Administrador de Sistemas"
+}
+
 @cl.password_auth_callback
 def auth_callback(username: str, password: str):
     """
-    Función de autenticación temporal y ágil para el prototipo.
-    Acepta cualquier nombre de usuario o correo de forma dinámica.
+    Función de autenticación temporal corporativa.
+    Valida credenciales simulando la integración OIDC/Microsoft AD.
     """
-    clean_username = username.strip()
-    if not clean_username:
+    clean_username = username.strip().lower()
+    
+    # 1. Comprobar si el correo está registrado en la base de gobernanza
+    rol_asignado = DICCIONARIO_ROLES.get(clean_username)
+    if not rol_asignado:
+        print(f"[AUTH ERROR] Intento de login fallido para '{clean_username}'. Usuario no autorizado en la base de gobernanza.")
+        return None
+        
+    # 2. Comprobar contraseña corporativa demo
+    if password != "Osi2026!":
+        print(f"[AUTH ERROR] Contraseña incorrecta para el usuario '{clean_username}'.")
         return None
 
-    email = clean_username
-    if "@" not in clean_username:
-        # Reemplazar espacios y formatear correo temporal
-        email_prefix = clean_username.lower().replace(" ", ".")
-        email = f"{email_prefix}@osinergmin.gob.pe"
-        
-    display_name = clean_username
-    if "@" in clean_username:
-        display_name = clean_username.split("@")[0].replace(".", " ").title()
+    # Formatear el display name a partir del correo
+    display_name = clean_username.split("@")[0].replace(".", " ").title()
 
-    # Devolvemos el usuario autenticado dinámicamente
-    return cl.User(identifier=email, username=email, display_name=display_name)
+    # Devolvemos el usuario autenticado con su rol asignado en la metadata
+    print(f"[AUTH SUCCESS] Usuario '{clean_username}' autenticado como '{rol_asignado}'.")
+    return cl.User(
+        identifier=clean_username, 
+        username=clean_username, 
+        display_name=display_name,
+        metadata={"rol": rol_asignado}
+    )
 
 # ----------------- Eventos de Chainlit -----------------
 
@@ -939,9 +972,76 @@ async def start():
             }
         }
         
+        local_osam_tool = {
+            "type": "function",
+            "function": {
+                "name": "query_data_osam",
+                "description": "Herramienta analítica centralizada. Ejecuta consultas analíticas gobernadas en la base de datos a partir de una intención semántica estructurada (OSAM Query) y define su presentación abstracta. Úsela siempre que el usuario le pida datos, métricas, comparaciones o tendencias sobre generación, demanda o estaciones de servicio.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "object",
+                            "properties": {
+                                "fields": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string", "description": "Nombre físico de la columna a consultar (ej: POTENCIA_MW, DEMANDA_MAX_MW, GENERACION_GWH, NO_ESTACION)."},
+                                            "aggregation": {"type": "string", "enum": ["SUM", "AVG", "MAX", "MIN", "COUNT", "NONE"], "description": "Función de agregación SQL a aplicar."}
+                                        },
+                                        "required": ["name", "aggregation"]
+                                    },
+                                    "description": "Lista de campos numéricos a agregar o columnas a seleccionar con su función de agregación."
+                                },
+                                "dimensions": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Lista de columnas físicas para agrupar (ej: DEPARTAMENTO, TECNOLOGIA, FECHA, PROVINCIA, DISTRITO)."
+                                },
+                                "filters": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "field": {"type": "string", "description": "Columna física a filtrar (ej: DEPARTAMENTO, TECNOLOGIA, ESTADO, FECHA)."},
+                                            "operator": {"type": "string", "enum": ["equals", "in", "greater_than", "less_than"]},
+                                            "value": {"type": "any", "description": "Valor del filtro. Si el operador es 'in', debe ser un array de valores."}
+                                        },
+                                        "required": ["field", "operator", "value"]
+                                    },
+                                    "description": "Filtros lógicos aplicados."
+                                }
+                            },
+                            "required": ["fields"]
+                        },
+                        "presentation": {
+                            "type": "object",
+                            "properties": {
+                                "chart": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {"type": "string", "enum": ["line", "bar", "scatter", "pie", "none"], "description": "Tipo de gráfico abstracto deseado."},
+                                        "x": {"type": "string", "description": "Campo a mapear en el eje X (generalmente la dimensión temporal o nominal principal)."},
+                                        "y": {"type": "string", "description": "Campo a mapear en el eje Y (medida cuantitativa principal)."},
+                                        "series": {"type": "string", "description": "Campo opcional para segmentar por series de color (ej: departamento, tecnologia)."}
+                                    },
+                                    "required": ["type"]
+                                }
+                            },
+                            "description": "Especificación de presentación abstracta para los gráficos."
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+        
         if openai_tools is None:
             openai_tools = []
         openai_tools.append(local_chart_tool)
+        openai_tools.append(local_osam_tool)
         cl.user_session.set("openai_tools", openai_tools)
         
         if len(openai_tools) > 1:
@@ -949,6 +1049,15 @@ async def start():
             step.output = f"Se cargaron {len(openai_tools)} herramientas:\n{tools_list_desc}"
         else:
             step.output = "⚠️ Advertencia: No se pudieron precargar las herramientas del servidor. Verifica la URL en .env"
+
+    # Cargar catálogo de datos gobernados en caché de sesión al arrancar
+    try:
+        catalogo = run_local_tool(MCP_SERVER_URL, "get_catalogo_datos", {})
+        if isinstance(catalogo, list):
+            cl.user_session.set("catalogo_completo", catalogo)
+            print(f"[BACKEND] Catálogo de datos cargado en sesión ({len(catalogo)} elementos).")
+    except Exception as ce:
+        print(f"[BACKEND ERROR] No se pudo precargar el catálogo en sesión: {ce}")
 
     # Construir el System Prompt adaptado dinámicamente según el rol del usuario
     personalized_system_prompt = SYSTEM_PROMPT
@@ -984,8 +1093,8 @@ async def start():
             cl.input_widget.Select(
                 id="ubicacion",
                 label="Ubicación",
-                values=["Todas", "Amazonas", "Ancash", "Apurímac", "Arequipa", "Ayacucho", "Cajamarca", "Callao", "Cusco", "Huancavelica", "Huánuco", "Ica", "Junín", "La Libertad", "Lambayeque", "Lima", "Loreto", "Madre de Dios", "Moquegua", "Pasco", "Piura", "Puno", "San Martín", "Tacna", "Tumbes", "Ucayali"],
-                initial_index=18, # Moquegua
+                values=["Sede Nacional", "Amazonas", "Áncash", "Apurímac", "Arequipa", "Ayacucho", "Cajamarca", "Callao", "Cusco", "Huancavelica", "Huánuco", "Ica", "Junín", "La Libertad", "Lambayeque", "Lima", "Loreto", "Madre de Dios", "Moquegua", "Pasco", "Piura", "Puno", "San Martín", "Tacna", "Tumbes", "Ucayali"],
+                initial_index=0, # Sede Nacional
             ),
             cl.input_widget.Select(
                 id="periodo",
@@ -1021,32 +1130,58 @@ async def start():
 
 @cl.on_settings_update
 async def setup_agent(settings):
-    # Guardamos los filtros en la sesión para poder inyectarlos en el prompt del sistema o pasarlos al backend
+    # Obtener filtros antiguos para comparación
+    prev_settings = cl.user_session.get("filtros_activos") or {}
     cl.user_session.set("filtros_activos", settings)
     
-    ubicacion = settings.get("ubicacion")
-    periodo = settings.get("periodo")
-    categoria = ", ".join(settings.get("categoria", []))
-    entidad = ", ".join(settings.get("entidad", []))
+    # Detectar cambios en los datasets activos
+    prev_datasets = prev_settings.get("datasets_activos", [])
+    curr_datasets = settings.get("datasets_activos", [])
     
-    mensaje_filtros = f"✅ **Filtros Actualizados:**\n- Ubicación: {ubicacion}\n- Periodo: {periodo}"
-    if categoria:
-        mensaje_filtros += f"\n- Categoría: {categoria}"
-    if entidad:
-        mensaje_filtros += f"\n- Entidad: {entidad}"
+    prev_titles = [d.get("table_name") if isinstance(d, dict) else str(d) for d in prev_datasets]
+    curr_titles = [d.get("table_name") if isinstance(d, dict) else str(d) for d in curr_datasets]
+    
+    if curr_titles != prev_titles:
+        # Encontrar cuál se agregó
+        added = [d for d in curr_datasets if (d.get("table_name") if isinstance(d, dict) else str(d)) not in prev_titles]
+        if added:
+            added_item = added[0]
+            table_name = added_item.get("table_name") if isinstance(added_item, dict) else str(added_item)
+            await cl.Message(
+                content=f"📥 **Dataset importado y activo:** `{table_name}`\nEl asistente ahora tiene este dataset como contexto prioritario.",
+                author="Sistema"
+            ).send()
+            return
+
+    # Comprobar si hubo cambios en los otros filtros para evitar spam redundante
+    keys = ["ubicacion", "periodo", "categoria", "entidad"]
+    has_filter_changes = any(settings.get(k) != prev_settings.get(k) for k in keys if k in settings or k in prev_settings)
+    
+    if has_filter_changes:
+        ubicacion = settings.get("ubicacion")
+        periodo = settings.get("periodo")
+        categoria = ", ".join(settings.get("categoria", [])) if isinstance(settings.get("categoria"), list) else settings.get("categoria", "")
+        entidad = ", ".join(settings.get("entidad", [])) if isinstance(settings.get("entidad"), list) else settings.get("entidad", "")
         
-    await cl.Message(
-        content=mensaje_filtros,
-        author="Sistema"
-    ).send()
+        mensaje_filtros = f"✅ **Filtros Actualizados:**\n- Ubicación: {ubicacion}\n- Periodo: {periodo}"
+        if categoria:
+            mensaje_filtros += f"\n- Categoría: {categoria}"
+        if entidad:
+            mensaje_filtros += f"\n- Entidad: {entidad}"
+            
+        await cl.Message(
+            content=mensaje_filtros,
+            author="Sistema"
+        ).send()
 
 @cl.on_message
 async def main(message: cl.Message):
     print(f"\n[BACKEND] --- ON MESSAGE TRIGGERED --- Content: {message.content!r}")
+    clean_query = message.content.strip().lower()
+        
     # Mantener el resultado de herramientas de turnos anteriores para permitir graficar datos persistentes
     cl.user_session.set("chart_generated_in_turn", False)
     catalogo_consultado_en_este_turno = False
-    clean_query = message.content.strip().lower()
     
     # Recuperar variables de la sesión
     history = cl.user_session.get("history")
@@ -1122,6 +1257,8 @@ async def main(message: cl.Message):
             if delta.tool_calls:
                 for tc in delta.tool_calls:
                     idx = tc.index
+                    if idx is None:
+                        idx = 0
                     if idx not in tool_calls_chunks:
                         tool_calls_chunks[idx] = {
                             "id": tc.id,
@@ -1134,6 +1271,20 @@ async def main(message: cl.Message):
                         tool_calls_chunks[idx]["function"]["name"] += tc.function.name
                     if tc.function and tc.function.arguments:
                         tool_calls_chunks[idx]["function"]["arguments"] += tc.function.arguments
+                        
+                    # Capturar extra_content / thought_signature de Gemini 3.x
+                    tc_extra = getattr(tc, "model_extra", None) or {}
+                    extra_content = tc_extra.get("extra_content") or getattr(tc, "extra_content", None)
+                    if extra_content:
+                        if "extra_content" not in tool_calls_chunks[idx]:
+                            tool_calls_chunks[idx]["extra_content"] = {}
+                        for k, v in extra_content.items():
+                            if isinstance(v, dict) and k in tool_calls_chunks[idx]["extra_content"]:
+                                if not isinstance(tool_calls_chunks[idx]["extra_content"][k], dict):
+                                    tool_calls_chunks[idx]["extra_content"][k] = {}
+                                tool_calls_chunks[idx]["extra_content"][k].update(v)
+                            else:
+                                tool_calls_chunks[idx]["extra_content"][k] = v
         
         print(f"[BACKEND] Stream finished. Total chunks: {chunk_count}, msg created: {msg is not None}, tool calls count: {len(tool_calls_chunks)}")
 
@@ -1174,6 +1325,50 @@ async def main(message: cl.Message):
                         else:
                             step.output = f"Error generando gráfico: {message_text}"
                             result = {"status": "error", "message": message_text}
+                elif name == "query_data_osam":
+                    async with cl.Step(name="Procesando Consulta Semántica OSAM", type="tool") as step:
+                        step.input = args
+                        
+                        # Obtener geografía y rol de la sesión de usuario
+                        filtros_activos = cl.user_session.get("filtros_activos") or {}
+                        user_geography = filtros_activos.get("ubicacion", "Sede Nacional")
+                        
+                        user_session = cl.user_session.get("user")
+                        user_role = "Analista"
+                        if user_session and hasattr(user_session, "metadata") and isinstance(user_session.metadata, dict):
+                            user_role = user_session.metadata.get("rol", "Analista")
+                            
+                        # Extraer query y presentation
+                        query_dict = args.get("query", {})
+                        presentation_dict = args.get("presentation", {})
+                        
+                        # Ejecutar la consulta en el OSAM Gateway ( DuckDB + RLS )
+                        result = execute_osam_query(query_dict, user_role, user_geography)
+                        
+                        if result.get("status") == "success":
+                            # Inyectar presentation al bloque report de OSAM v1
+                            result["report"]["presentation"] = presentation_dict
+                            
+                            # Extraer nombres de campos para la metadata de la intención
+                            field_names = [f["name"] for f in query_dict.get("fields", [])]
+                            
+                            result["report"]["intent"] = {
+                                "goal": "compare" if len(query_dict.get("filters", [])) > 1 or "IN" in str(query_dict) else "query",
+                                "entities": field_names + query_dict.get("dimensions", []),
+                                "measure": field_names[0] if field_names else None,
+                                "time_grain": "day" if any("fecha" in str(d).lower() for d in query_dict.get("dimensions", [])) else "none",
+                                "confidence": 0.98
+                            }
+                            
+                            # Guardar en sesión de Chainlit para inyección o referencia posterior
+                            cl.user_session.set("last_osam_payload", result)
+                            
+                            step.output = f"✅ Consulta ejecutada con éxito en DuckDB.\n" \
+                                          f"- Registros recuperados: {len(result['report']['data'])}\n" \
+                                          f"- Hash de Consulta: {result['report']['provenance']['query_hash']}\n" \
+                                          f"- RLS Autorizado para geografía: {user_geography}"
+                        else:
+                            step.output = f"❌ Error ejecutando consulta OSAM: {result.get('message')}"
                 else:
                     # Crear un paso de ejecución en la UI de Chainlit para feedback al usuario
                     async with cl.Step(name=f"Ejecutando: {name}", type="tool") as step:
@@ -1200,6 +1395,8 @@ async def main(message: cl.Message):
                 })
                 if name != "crear_grafico":
                     cl.user_session.set("last_tool_result", result)
+                if name == "get_catalogo_datos" and isinstance(result, list):
+                    cl.user_session.set("catalogo_completo", result)
                 
             # Continuar en el bucle para que el LLM reciba los resultados de la herramienta
             continue
@@ -1254,20 +1451,36 @@ async def main(message: cl.Message):
                                 author=f"Agente ({active_model})"
                             ).send()
                         
-            # --- DETECCIÓN Y GENERACIÓN AUTOMÁTICA DE DATASETS ---
             # 1. Obtener la lista completa de tablas del catálogo que tengamos en sesión
-            catalogo_completo = cl.user_session.get("last_tool_result")
-            if not isinstance(catalogo_completo, list):
-                # Fallback al mock local si no se ha cargado el catálogo aún
-                catalogo_completo = get_mock_tool_response("get_catalogo_datos", {})
+            catalogo_completo = cl.user_session.get("catalogo_completo")
+            if (not isinstance(catalogo_completo, list) or 
+                len(catalogo_completo) == 0 or 
+                (len(catalogo_completo) > 0 and not any(k in catalogo_completo[0] for k in ["NO_TABLA", "table_name"]))):
+                try:
+                    print("[BACKEND] Intentando recuperar catálogo del servidor real de MCP para el escaneo de datasets...")
+                    catalogo_completo = run_local_tool(MCP_SERVER_URL, "get_catalogo_datos", {})
+                    if isinstance(catalogo_completo, list) and len(catalogo_completo) > 0:
+                        cl.user_session.set("catalogo_completo", catalogo_completo)
+                        print(f"[BACKEND] Catálogo real recuperado exitosamente ({len(catalogo_completo)} elementos) para escaneo.")
+                except Exception as ex:
+                    print(f"[BACKEND WARNING] Error al recuperar catálogo real: {ex}")
+                    catalogo_completo = None
+                    
+            if not isinstance(catalogo_completo, list) or len(catalogo_completo) == 0:
+                # Cargar dinámicamente desde el Registro Semántico real para evitar mocks
+                catalog_dict = get_semantic_catalog()
+                catalogo_completo = [
+                    {"table_name": k, "description": v.get("description", "")}
+                    for k, v in catalog_dict.get("tables", {}).items()
+                ]
                 
             # 2. Buscar menciones de tablas en el texto final de la respuesta del asistente (full_text)
             import re
             content_text = full_text or ""
             
-            # Extraer posibles palabras en mayúsculas
-            palabras = re.findall(r'\b[A-Z0-9_]{5,}\b', content_text)
-            palabras = list(dict.fromkeys(palabras))
+            # Extraer posibles palabras en mayúsculas y minúsculas (de longitud >= 4)
+            palabras_raw = re.findall(r'\b[a-zA-Z0-9_]{4,}\b', content_text)
+            palabras = list(dict.fromkeys([p.upper() for p in palabras_raw]))
             
             # Extraer números de 4 dígitos (posibles IDs de catálogo)
             numeros = re.findall(r'\b\d{4}\b', content_text)
@@ -1294,7 +1507,9 @@ async def main(message: cl.Message):
                                             "description": description,
                                             "format": "SQL Table",
                                             "license": "Osinergmin",
-                                            "organization": "Gobernanza de Datos"
+                                            "organization": "Gobernanza de Datos",
+                                            "schema": item.get("NO_ESQUEMA_ORIGEN") or item.get("schema") or "ES_DATGOB_CV",
+                                            "id_catalogo": int(item.get("ID_CATALOGO_DATO") or item.get("id_catalogo") or num_int)
                                         })
                                         tablas_agregadas.add(name_in_item.upper())
                                         break
@@ -1315,7 +1530,9 @@ async def main(message: cl.Message):
                             "description": description,
                             "format": "SQL Table",
                             "license": "Osinergmin",
-                            "organization": "Gobernanza de Datos"
+                            "organization": "Gobernanza de Datos",
+                            "schema": item.get("NO_ESQUEMA_ORIGEN") or item.get("schema") or "ES_DATGOB_CV",
+                            "id_catalogo": int(item.get("ID_CATALOGO_DATO") or item.get("id_catalogo") or 0)
                         })
                         tablas_agregadas.add(name_in_item.upper())
                         break

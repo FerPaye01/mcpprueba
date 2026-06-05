@@ -1,0 +1,125 @@
+{
+  "tables": {
+    "CMO_TX_CENTRAL_GEN": {
+      "label": "Centrales de Generación Eléctrica",
+      "description": "Catálogo de centrales eléctricas activas, su ubicación, tecnología y potencia instalada.",
+      "measures": {
+        "potencia_mw": {
+          "label": "Potencia Instalada (MW)",
+          "description": "Potencia total instalada de la central eléctrica en megawatts.",
+          "formula": "SUM(POTENCIA_MW)",
+          "unit": "MW",
+          "owner": "Gerencia de Generación y Transmisión"
+        },
+        "total_centrales": {
+          "label": "Total de Centrales",
+          "description": "Conteo total de centrales eléctricas registradas.",
+          "formula": "COUNT(NO_CENTRAL)",
+          "unit": "Unidades",
+          "owner": "Gerencia de Generación y Transmisión"
+        }
+      },
+      "dimensions": {
+        "no_central": {
+          "label": "Nombre de la Central",
+          "type": "nominal",
+          "description": "Nombre identificativo de la central de generación eléctrica."
+        },
+        "departamento": {
+          "label": "Departamento",
+          "type": "nominal",
+          "description": "Ubicación a nivel regional de la central eléctrica."
+        },
+        "tecnologia": {
+          "label": "Tecnología de Generación",
+          "type": "nominal",
+          "description": "Matriz energética o tipo de tecnología de la central (Solar, Eólica, Hidráulica, Térmica)."
+        },
+        "estado": {
+          "label": "Estado Operativo",
+          "type": "nominal",
+          "description": "Estado de servicio de la central (En Servicio, Mantenimiento, Fuera de Servicio)."
+        }
+      }
+    },
+    "VW_EESS_UBICACION_GEO": {
+      "label": "Estaciones de Servicio (EESS)",
+      "description": "Estaciones de servicio y grifos autorizados con su ubicación geográfica y coordenadas.",
+      "measures": {
+        "total_estaciones": {
+          "label": "Total de Estaciones",
+          "description": "Cantidad de estaciones de servicio registradas.",
+          "formula": "COUNT(NO_ESTACION)",
+          "unit": "Estaciones",
+          "owner": "Gerencia de Hidrocarburos"
+        }
+      },
+      "dimensions": {
+        "no_estacion": {
+          "label": "Nombre del Establecimiento",
+          "type": "nominal",
+          "description": "Razón social o nombre del grifo."
+        },
+        "departamento": {
+          "label": "Departamento",
+          "type": "nominal",
+          "description": "Departamento político del establecimiento."
+        },
+        "provincia": {
+          "label": "Provincia",
+          "type": "nominal",
+          "description": "Provincia de ubicación del establecimiento."
+        },
+        "distrito": {
+          "label": "Distrito",
+          "type": "nominal",
+          "description": "Distrito político del establecimiento."
+        },
+        "latitud": {
+          "label": "Latitud",
+          "type": "quantitative",
+          "description": "Coordenada de latitud geográfica del grifo."
+        },
+        "longitud": {
+          "label": "Longitud",
+          "type": "quantitative",
+          "description": "Coordenada de longitud geográfica del grifo."
+        }
+      }
+    },
+    "DEMANDA_DIARIA_ELEC": {
+      "label": "Demanda Eléctrica Diaria",
+      "description": "Historial de demanda máxima y generación diaria de electricidad a nivel del SEIN.",
+      "measures": {
+        "demanda_max_mw": {
+          "label": "Demanda Máxima (MW)",
+          "description": "Demanda pico registrada en el Sistema Eléctrico Interconectado Nacional.",
+          "formula": "MAX(DEMANDA_MAX_MW)",
+          "unit": "MW",
+          "owner": "Gerencia de Regulación Tarifaria"
+        },
+        "generacion_gwh": {
+          "label": "Generación Diaria (GWh)",
+          "description": "Total de energía generada en el SEIN expresada en gigavatios-hora.",
+          "formula": "SUM(GENERACION_GWH)",
+          "unit": "GWh",
+          "owner": "Gerencia de Regulación Tarifaria"
+        },
+        "demanda_promedio_mw": {
+          "label": "Demanda Promedio (MW)",
+          "description": "Promedio de la demanda máxima registrada.",
+          "formula": "AVG(DEMANDA_MAX_MW)",
+          "unit": "MW",
+          "owner": "Gerencia de Regulación Tarifaria"
+        }
+      },
+      "dimensions": {
+        "fecha": {
+          "label": "Fecha del Registro",
+          "type": "temporal",
+          "description": "Fecha del día en que se registran las métricas."
+        }
+      }
+    }
+  }
+}

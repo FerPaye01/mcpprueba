@@ -1,4 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
+
+:root {
+  --primary-color: #0039aa;
+  --primary-500: #0039aa;
+  --primary-color-text: #ffffff;
+  --surface-900: #101828;
+  
+  /* Escalas de Osinergmin */
+  --blue-50: #eef2ff;
+  --blue-500: #0039aa;
+  --blue-900: #1e1b4b;
+  --yellow-50: #fefce8;
+  --yellow-500: #fbe122;
+  --yellow-900: #713f12;
+  --gray-50: #f9fafb;
+  --gray-200: #e5e7eb;
+  --gray-500: #6b7280;
+}
 
 @theme {
   --color-osi-blue: #0039AA;
@@ -7,11 +26,15 @@
   --color-osi-yellow: #FBE122;
   --color-osi-green: #35CC29;
   --color-osi-orange: #F6A229;
+  --color-osi-gold: #BFAB49;
+  --color-osi-light-blue: #D2F7FC;
+  --color-osi-light-gray: #F2F2F2;
+  --font-sans: 'Poppins', sans-serif;
 }
 
 body {
   margin: 0;
   padding: 0;
   background-color: #f8fafc;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
