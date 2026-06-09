@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   useChatSession, 
   useChatMessages, 
@@ -8,7 +8,7 @@ import {
 } from '@chainlit/react-client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Search, RefreshCw, LogOut, CheckCircle2, X, Trash2, Mail, Lock, ShieldAlert } from 'lucide-react';
+import { Search, RefreshCw, LogOut, X, Trash2, Mail, Lock, ShieldAlert, Settings, ChevronDown, CheckSquare, Square } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import type { IResultItem } from './components/Sidebar';
 import { FilterPanel } from './components/FilterPanel';
@@ -57,6 +57,53 @@ export default function App() {
   const { messages } = useChatMessages();
   const { sendMessage, updateChatSettings, clear } = useChatInteract();
   const { loading, connected } = useChatData();
+  
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settings, setSettings] = useState({
+    showTable: true,
+    showChart: true
+  });
+  const [tempSettings, setTempSettings] = useState({ showTable: true, showChart: true });
+
+  // Cargar configuraciones de local storage
+  useEffect(() => {
+    const saved = localStorage.getItem('osam_user_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setSettings(parsed);
+        setTempSettings(parsed);
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Controlar click fuera del menú de perfil para cerrarlo
+  useEffect(() => {
+    if (!showProfileMenu) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.profile-menu-container')) {
+        setShowProfileMenu(false);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, [showProfileMenu]);
+
+  // Sincronizar tempSettings cuando se abre el modal
+  useEffect(() => {
+    if (showSettingsModal) {
+      setTempSettings(settings);
+    }
+  }, [showSettingsModal, settings]);
+
+  const handleSaveSettings = (newSettings: { showTable: boolean; showChart: boolean }) => {
+    setSettings(newSettings);
+    localStorage.setItem('osam_user_settings', JSON.stringify(newSettings));
+  };
   
   const flatMessages = flattenMessages(messages);
 
@@ -125,6 +172,15 @@ export default function App() {
     } finally {
       setLoginLoading(false);
     }
+  };
+
+  const handleOffice365Login = () => {
+    setLoginError('');
+    setLoginLoading(true);
+    // Simular redirección y autenticación exitosa a través de Office 365 (OIDC)
+    setTimeout(() => {
+      handleLogin(undefined, 'gerente.energia@osinergmin.gob.pe', 'Osi2026!');
+    }, 1200);
   };
 
   useEffect(() => {
@@ -382,56 +438,52 @@ export default function App() {
                 </div>
               )}
 
-              {/* Botón de Enviar */}
-              <button
-                type="submit"
-                disabled={loginLoading}
-                className="w-full bg-slate-900 text-white py-5 rounded-[1.5rem] font-black text-[11px] hover:bg-osi-blue transition-all shadow-xl shadow-slate-200 uppercase tracking-[0.2em] active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loginLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Iniciando Sesión...
-                  </>
-                ) : (
-                  'Iniciar Sesión Corporativa'
-                )}
-              </button>
-            </form>
-
-            {/* Helper para evaluar el prototipo */}
-            <div className="mt-8 pt-6 border-t border-slate-100 space-y-3">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block text-center">Usuarios de Prueba (Demostración)</span>
-              
-              <div className="grid grid-cols-2 gap-2">
+              {/* Botones de Login */}
+              <div className="flex flex-col gap-4">
                 <button
-                  type="button"
-                  onClick={() => {
-                    setEmailInput('gerente.energia@osinergmin.gob.pe');
-                    setPasswordInput('Osi2026!');
-                    setTimeout(() => handleLogin(undefined, 'gerente.energia@osinergmin.gob.pe', 'Osi2026!'), 100);
-                  }}
-                  className="p-3 bg-slate-50 hover:bg-blue-50/50 hover:text-osi-blue border border-slate-100 rounded-xl text-left transition-all cursor-pointer"
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full bg-slate-900 text-white py-5 rounded-[1.5rem] font-black text-[11px] hover:bg-osi-blue transition-all shadow-xl shadow-slate-200 uppercase tracking-[0.2em] active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  <span className="text-[10px] font-black block">Gerente de Energía</span>
-                  <span className="text-[8px] font-bold text-slate-400 block truncate">gerente.energia@...</span>
+                  {loginLoading && !emailInput.includes('gerente.energia') ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Iniciando Sesión...
+                    </>
+                  ) : (
+                    'Iniciar Sesión'
+                  )}
                 </button>
 
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-100"></div>
+                  <span className="flex-shrink mx-4 text-slate-300 text-[10px] font-black uppercase tracking-wider">O</span>
+                  <div className="flex-grow border-t border-slate-100"></div>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    setEmailInput('analista.mcp@osinergmin.gob.pe');
-                    setPasswordInput('Osi2026!');
-                    setTimeout(() => handleLogin(undefined, 'analista.mcp@osinergmin.gob.pe', 'Osi2026!'), 100);
-                  }}
-                  className="p-3 bg-slate-50 hover:bg-blue-50/50 hover:text-osi-blue border border-slate-100 rounded-xl text-left transition-all cursor-pointer"
+                  onClick={handleOffice365Login}
+                  disabled={loginLoading}
+                  className="w-full bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200/80 py-4.5 rounded-[1.5rem] font-black text-[11px] transition-all shadow-sm uppercase tracking-[0.2em] active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  <span className="text-[10px] font-black block">Analista Técnico</span>
-                  <span className="text-[8px] font-bold text-slate-400 block truncate">analista.mcp@...</span>
+                  {loginLoading && emailInput.includes('gerente.energia') ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" /> Conectando a OIDC...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4.5 h-4.5 shrink-0" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="0" y="0" width="10.5" height="10.5" fill="#F25022"/>
+                        <rect x="11.5" y="0" width="10.5" height="10.5" fill="#7FBA00"/>
+                        <rect x="0" y="11.5" width="10.5" height="10.5" fill="#00A4EF"/>
+                        <rect x="11.5" y="11.5" width="10.5" height="10.5" fill="#FFB900"/>
+                      </svg>
+                      <span>Ingresar con Office 365</span>
+                    </>
+                  )}
                 </button>
               </div>
-              
-              <span className="text-[9px] text-slate-400 font-semibold block text-center mt-1">Contraseña común: <code className="bg-slate-100 px-1.5 py-0.5 rounded font-black text-slate-700">Osi2026!</code></span>
-            </div>
+            </form>
 
           </div>
         </div>
@@ -462,31 +514,83 @@ export default function App() {
             <h2 className="font-black text-2xl text-slate-800 tracking-tight flex items-center gap-3">
               Refinar Resultados Asistido <span className="px-3 py-1 bg-slate-900 text-white text-[10px] rounded-full tracking-widest uppercase font-black">RF-07</span>
             </h2>
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-black uppercase text-osi-blue tracking-wider bg-osi-blue/5 px-4 py-2 rounded-xl flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-osi-blue" />
-                {user?.display_name || user?.identifier || 'Institucional'}
-              </span>
-              {user?.metadata?.rol && (
-                <span className="text-[10px] font-black uppercase text-white bg-slate-900 px-3 py-2.5 rounded-xl tracking-wider shadow-sm shrink-0">
-                  {user.metadata.rol}
-                </span>
+            <div className="relative flex items-center gap-3 profile-menu-container">
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 rounded-2xl cursor-pointer select-none transition-all duration-200 group active:scale-95 shadow-sm"
+              >
+                <div className="w-8 h-8 rounded-full bg-osi-blue/10 flex items-center justify-center text-osi-blue font-black text-sm uppercase">
+                  {user?.display_name ? user.display_name.charAt(0) : 'U'}
+                </div>
+                
+                <div className="flex flex-col text-left min-w-[80px]">
+                  <span className="text-xs font-black text-slate-800 tracking-tight leading-none">
+                    {user?.display_name || user?.identifier || 'Usuario'}
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                    {user?.metadata?.rol || 'Analista'}
+                  </span>
+                </div>
+                
+                <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+              </button>
+
+              {/* Menú Emergente de Perfil */}
+              {showProfileMenu && (
+                <div className="absolute right-0 top-14 w-64 bg-white/95 backdrop-blur-2xl rounded-2xl border border-slate-100 shadow-2xl shadow-slate-300/60 p-2 z-50 animate-in fade-in slide-in-from-top-4 duration-200 flex flex-col">
+                  {/* Info Perfil */}
+                  <div className="px-4 py-3 flex flex-col gap-0.5 border-b border-slate-50">
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                      {user?.display_name || 'Institucional'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold truncate">
+                      {user?.identifier || 'gerente.energia@osinergmin.gob.pe'}
+                    </span>
+                    {user?.metadata?.rol && (
+                      <span className="mt-1 self-start px-2 py-0.5 bg-osi-blue/10 text-osi-blue text-[8px] font-black rounded-md uppercase tracking-wider">
+                        {user.metadata.rol}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Opciones */}
+                  <div className="py-1 flex flex-col gap-0.5">
+                    <button
+                      onClick={() => {
+                        setShowSettingsModal(true);
+                        setShowProfileMenu(false);
+                      }}
+                      className="flex items-center gap-3 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all cursor-pointer text-left"
+                    >
+                      <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+                      Configuraciones
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        handleClearChat();
+                        setShowProfileMenu(false);
+                      }}
+                      className="flex items-center gap-3 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all cursor-pointer text-left"
+                    >
+                      <Trash2 className="w-4 h-4 text-slate-400 shrink-0" />
+                      Limpiar Conversación
+                    </button>
+                  </div>
+                  
+                  <div className="border-t border-slate-50 mt-1 pt-1">
+                    <button
+                      onClick={() => {
+                        apiClient.logout().then(() => window.location.reload());
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-red-600 hover:text-red-700 hover:bg-red-50/50 rounded-xl transition-all cursor-pointer text-left"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500 shrink-0" />
+                      Cerrar Sesión
+                    </button>
+                  </div>
+                </div>
               )}
-              <button 
-                onClick={handleClearChat}
-                className="p-2.5 px-4 bg-slate-50 hover:bg-red-50 hover:text-red-500 text-slate-500 hover:text-red-600 rounded-xl transition-all cursor-pointer hover:scale-105 flex items-center gap-2 font-bold text-xs uppercase tracking-wider"
-                title="Limpiar Conversación"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Limpiar Chat</span>
-              </button>
-              <button 
-                onClick={() => apiClient.logout().then(() => window.location.reload())}
-                className="p-2.5 bg-slate-50 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-xl transition-all cursor-pointer hover:scale-105"
-                title="Cerrar Sesión"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
           </header>
           
@@ -529,6 +633,20 @@ export default function App() {
                                       th: ({node, ...props}) => <th className="px-5 py-4 text-left text-[10px] font-black uppercase text-osi-blue tracking-widest" {...props} />,
                                       td: ({node, ...props}) => <td className="px-5 py-4 text-[13px] border-t border-slate-50 font-semibold" {...props} />,
                                       strong: ({node, ...props}) => <strong className="font-black" {...props} />,
+                                      pre: ({node, children, ...props}) => {
+                                        const isCustomBlock = React.Children.toArray(children).some((child: any) => {
+                                          return child && child.props && (
+                                            child.props.className?.includes('language-json-osam') ||
+                                            child.props.className?.includes('language-json-datasets') ||
+                                            child.props.className?.includes('language-json-chart')
+                                          );
+                                        });
+
+                                        if (isCustomBlock) {
+                                          return <div className="w-full my-6">{children}</div>;
+                                        }
+                                        return <pre className="overflow-x-auto my-6 rounded-2xl bg-slate-950 text-slate-100 p-6 font-mono text-xs leading-relaxed" {...props}>{children}</pre>;
+                                      },
                                       img: ({node, ...props}) => (
                                         <img 
                                           {...props} 
@@ -547,7 +665,7 @@ export default function App() {
                                             if (codeContent.startsWith('{')) {
                                               const parsed = JSON.parse(codeContent);
                                               if (parsed && (parsed.report || parsed.analysis)) {
-                                                return <OsamRenderer payload={parsed} />;
+                                                return <OsamRenderer payload={parsed} settings={settings} />;
                                               }
                                             }
                                           } catch (err) {
@@ -686,6 +804,118 @@ export default function App() {
               alt="Visualización ampliada" 
               className="w-full h-auto max-h-[80vh] object-contain rounded-[2rem]"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Configuraciones */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+            {/* Header */}
+            <div className="p-6 px-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5 text-osi-blue" />
+                <h3 className="font-black text-lg text-slate-800 uppercase tracking-wider">Configuraciones del Sistema</h3>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="p-8 space-y-6">
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">
+                  Entregables Analíticos
+                </h4>
+                <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                  Defina qué tipo de componentes visuales se generarán y mostrarán en la pantalla de análisis de datos.
+                </p>
+                
+                <div className="space-y-3.5 pt-2">
+                  {/* Checkbox Tabla */}
+                  <label className="flex items-start gap-3.5 p-4 bg-slate-50 hover:bg-slate-100/70 border border-slate-200/50 rounded-[1.25rem] cursor-pointer select-none transition-all duration-200 group">
+                    <input
+                      type="checkbox"
+                      checked={tempSettings.showTable}
+                      onChange={() => setTempSettings(prev => ({ ...prev, showTable: !prev.showTable }))}
+                      className="hidden"
+                    />
+                    <div className="mt-0.5">
+                      {tempSettings.showTable ? (
+                        <CheckSquare className="w-5 h-5 text-osi-blue fill-osi-blue/5 shrink-0" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-300 shrink-0 group-hover:text-slate-400" />
+                      )}
+                    </div>
+                    <div>
+                      <span className={`block text-xs font-black uppercase tracking-wide ${tempSettings.showTable ? 'text-slate-800' : 'text-slate-600'}`}>
+                        Habilitar Tablas de Datos
+                      </span>
+                      <span className="block text-[11px] font-semibold text-slate-400 mt-1 leading-normal">
+                        Permite renderizar y explorar reportes de datos estructurados, con opción de exportación a CSV.
+                      </span>
+                    </div>
+                  </label>
+                  
+                  {/* Checkbox Gráfico */}
+                  <label className="flex items-start gap-3.5 p-4 bg-slate-50 hover:bg-slate-100/70 border border-slate-200/50 rounded-[1.25rem] cursor-pointer select-none transition-all duration-200 group">
+                    <input
+                      type="checkbox"
+                      checked={tempSettings.showChart}
+                      onChange={() => setTempSettings(prev => ({ ...prev, showChart: !prev.showChart }))}
+                      className="hidden"
+                    />
+                    <div className="mt-0.5">
+                      {tempSettings.showChart ? (
+                        <CheckSquare className="w-5 h-5 text-osi-blue fill-osi-blue/5 shrink-0" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-300 shrink-0 group-hover:text-slate-400" />
+                      )}
+                    </div>
+                    <div>
+                      <span className={`block text-xs font-black uppercase tracking-wide ${tempSettings.showChart ? 'text-slate-800' : 'text-slate-600'}`}>
+                        Habilitar Gráficos Analíticos
+                      </span>
+                      <span className="block text-[11px] font-semibold text-slate-400 mt-1 leading-normal">
+                        Permite visualizar tendencias, curvas y distribuciones mediante gráficos interactivos (Vega-Lite).
+                      </span>
+                    </div>
+                  </label>
+                </div>
+                
+                {/* Validación error */}
+                {!tempSettings.showTable && !tempSettings.showChart && (
+                  <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-bold leading-normal animate-in slide-in-from-top-1">
+                    ⚠️ Debe mantener habilitado al menos un tipo de entregable (Tabla o Gráfico) para poder visualizar resultados.
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="p-6 px-8 border-t border-slate-50 bg-slate-50/20 flex justify-end gap-3 shrink-0">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  handleSaveSettings(tempSettings);
+                  setShowSettingsModal(false);
+                }}
+                disabled={!tempSettings.showTable && !tempSettings.showChart}
+                className="px-6 py-2.5 bg-osi-blue hover:bg-osi-blue-dark disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-osi-blue/25 transition-all cursor-pointer active:scale-95"
+              >
+                Guardar Cambios
+              </button>
+            </div>
           </div>
         </div>
       )}

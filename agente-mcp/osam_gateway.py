@@ -82,9 +82,10 @@ def translate_to_sql(table_name, fields, dimensions, filters, user_geography):
         raise ValueError(f"Tabla '{table_name}' no registrada en el catálogo de base de datos.")
 
     # Mapear nombres de columnas existentes para validación insensible a mayúsculas
-    valid_columns = {col["name"].upper(): col for col in catalog["columns"]}
+    valid_columns = {col["name"].upper(): col for col in catalog.get("columns", [])}
     
     select_clauses = []
+    selected_cols = set()
     
     # 1. Procesar campos solicitados con su agregación dinámica
     for field_spec in fields:
@@ -94,17 +95,24 @@ def translate_to_sql(table_name, fields, dimensions, filters, user_geography):
         if field_name not in valid_columns:
             raise ValueError(f"Columna '{field_name}' no existe en la tabla '{table_name}'.")
             
+        alias = field_name.upper()
         if agg_func in ["SUM", "AVG", "MAX", "MIN", "COUNT"]:
-            select_clauses.append(f"{agg_func}({field_name}) AS {field_name.lower()}")
+            select_clauses.append(f"{agg_func}({field_name}) AS {alias}")
+            selected_cols.add(alias)
         else:
-            select_clauses.append(f"{field_name} AS {field_name.lower()}")
+            if alias not in selected_cols:
+                select_clauses.append(f"{field_name} AS {alias}")
+                selected_cols.add(alias)
 
     # 2. Procesar dimensiones (columnas de agrupación)
     for dim in dimensions:
         dim_upper = dim.upper()
         if dim_upper not in valid_columns:
             raise ValueError(f"Dimensión '{dim}' no existe en la tabla '{table_name}'.")
-        select_clauses.append(f"{dim_upper} AS {dim.lower()}")
+        alias = dim_upper
+        if alias not in selected_cols:
+            select_clauses.append(f"{dim_upper} AS {alias}")
+            selected_cols.add(alias)
 
     select_str = ", ".join(select_clauses)
     
@@ -162,8 +170,10 @@ def execute_osam_query(query_dict, user_role="Analista", user_geography="Sede Na
     
     all_requested_cols = [f["name"].upper() for f in fields] + [d.upper() for d in dimensions]
     
-    for t_name, t_spec in catalog["tables"].items():
-        valid_cols = [c["name"].upper() for c in t_spec["columns"]]
+    for t_name, t_spec in catalog.get("tables", {}).items():
+        if not isinstance(t_spec, dict) or "columns" not in t_spec:
+            continue
+        valid_cols = [c["name"].upper() for c in t_spec.get("columns", [])]
         if all(col in valid_cols for col in all_requested_cols):
             target_table = t_name
             break
@@ -184,8 +194,8 @@ def execute_osam_query(query_dict, user_role="Analista", user_geography="Sede Na
         
         # Estructurar columns metadata
         columns_meta = []
-        table_catalog = catalog["tables"][target_table]
-        valid_columns_dict = {col["name"].upper(): col for col in table_catalog["columns"]}
+        table_catalog = catalog.get("tables", {}).get(target_table, {})
+        valid_columns_dict = {col["name"].upper(): col for col in table_catalog.get("columns", [])}
         
         for col in df.columns:
             col_upper = col.upper()

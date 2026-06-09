@@ -216,183 +216,46 @@ def fetch_tools_from_server(base_url):
     except Exception as e:
         raise RuntimeError(f"Fallo crítico de conexión al servidor MCP real en {url}: {str(e)}")
 
-# ----------------- Fallback Resiliente (Mocks Internos de Datos) -----------------
-
-import unicodedata
-
-def normalize_str(text):
-    if not text:
-        return ""
-    nfkd_form = unicodedata.normalize('NFKD', text)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).lower()
-
-def get_mock_tool_response(name, args, error_detail=None):
-    """
-    Simulación local de datos gobernados de Osinergmin en caso de desconexión del servidor MCP.
-    Proporciona resiliencia y datos altamente coherentes para la demo interactiva.
-    """
-    print(f"[BACKEND MOCK] Fallback activado para herramienta: {name!r}. Detalle: {error_detail}")
-    
-    if name == "get_catalogo_datos":
-        return [
-            {
-                "table_name": "CMO_TX_CENTRAL_GEN",
-                "description": "Catálogo nacional de centrales de generación eléctrica con especificación de departamento, tecnología (Solar, Eólica, Térmica, Hidráulica) y potencia instalada nominal en MW.",
-                "columns_count": 5
-            },
-            {
-                "table_name": "VW_EESS_UBICACION_GEO",
-                "description": "Registro georreferenciado de estaciones de servicio (grifos de combustible líquido y GNV) a nivel nacional con datos de departamento, provincia y distrito.",
-                "columns_count": 6
-            },
-            {
-                "table_name": "DEMANDA_DIARIA_ELEC",
-                "description": "Historial diario de la demanda de electricidad en MW registrada en el Sistema Eléctrico Interconectado Nacional (SEIN) en los últimos meses.",
-                "columns_count": 3
-            }
-        ]
-        
-    elif name == "get_detalle_catalogo_datos":
-        table_name = args.get("table_name") or args.get("table") or "CMO_TX_CENTRAL_GEN"
-        table_name = table_name.upper()
-        
-        if "CENTRAL" in table_name:
-            return {
-                "table_name": "CMO_TX_CENTRAL_GEN",
-                "columns": [
-                    {"name": "NO_CENTRAL", "type": "VARCHAR2", "description": "Nombre de la central de generación"},
-                    {"name": "DEPARTAMENTO", "type": "VARCHAR2", "description": "Departamento donde se ubica"},
-                    {"name": "POTENCIA_MW", "type": "NUMBER", "description": "Potencia instalada nominal en MW"},
-                    {"name": "TECNOLOGIA", "type": "VARCHAR2", "description": "Matriz o tecnología de generación (Solar, Eólica, etc.)"},
-                    {"name": "ESTADO", "type": "VARCHAR2", "description": "Estado operativo (En Servicio, Mantenimiento)"}
-                ]
-            }
-        elif "EESS" in table_name:
-            return {
-                "table_name": "VW_EESS_UBICACION_GEO",
-                "columns": [
-                    {"name": "NO_ESTACION", "type": "VARCHAR2", "description": "Razón social de la estación de servicio"},
-                    {"name": "DEPARTAMENTO", "type": "VARCHAR2", "description": "Departamento"},
-                    {"name": "PROVINCIA", "type": "VARCHAR2", "description": "Provincia"},
-                    {"name": "DISTRITO", "type": "VARCHAR2", "description": "Distrito"},
-                    {"name": "LATITUD", "type": "NUMBER", "description": "Latitud geográfica"},
-                    {"name": "LONGITUD", "type": "NUMBER", "description": "Longitud geográfica"}
-                ]
-            }
-        else: # DEMANDA_DIARIA_ELEC
-            return {
-                "table_name": "DEMANDA_DIARIA_ELEC",
-                "columns": [
-                    {"name": "FECHA", "type": "DATE", "description": "Fecha del registro diario"},
-                    {"name": "DEMANDA_MAX_MW", "type": "NUMBER", "description": "Máxima demanda diaria registrada en MW"},
-                    {"name": "GENERACION_GWH", "type": "NUMBER", "description": "Energía diaria total generada en GWh"}
-                ]
-            }
-            
-    elif name == "query_data":
-        table_name = args.get("table_name") or args.get("table") or "CMO_TX_CENTRAL_GEN"
-        table_name = table_name.upper()
-        filters_dict = args.get("filters") or {}
-        
-        # Normalizar filtros a minúsculas
-        norm_filters = {str(k).lower(): str(v).lower() for k, v in filters_dict.items()}
-        
-        if "CENTRAL" in table_name:
-            centrales = [
-                {"NO_CENTRAL": "Central Solar Rubí", "DEPARTAMENTO": "MOQUEGUA", "POTENCIA_MW": 180.0, "TECNOLOGIA": "Solar", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Solar Intipampa", "DEPARTAMENTO": "MOQUEGUA", "POTENCIA_MW": 44.0, "TECNOLOGIA": "Solar", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Solar Panamericana", "DEPARTAMENTO": "MOQUEGUA", "POTENCIA_MW": 20.0, "TECNOLOGIA": "Solar", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Hidroeléctrica Charcani V", "DEPARTAMENTO": "AREQUIPA", "POTENCIA_MW": 135.0, "TECNOLOGIA": "Hidráulica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Solar Majes", "DEPARTAMENTO": "AREQUIPA", "POTENCIA_MW": 20.0, "TECNOLOGIA": "Solar", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Solar Repartición", "DEPARTAMENTO": "AREQUIPA", "POTENCIA_MW": 20.0, "TECNOLOGIA": "Solar", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Térmica Cerro Verde", "DEPARTAMENTO": "AREQUIPA", "POTENCIA_MW": 180.0, "TECNOLOGIA": "Térmica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Hidroeléctrica Mantaro", "DEPARTAMENTO": "HUANCAVELICA", "POTENCIA_MW": 798.0, "TECNOLOGIA": "Hidráulica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Hidroeléctrica Huinco", "DEPARTAMENTO": "LIMA", "POTENCIA_MW": 240.0, "TECNOLOGIA": "Hidráulica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Hidroeléctrica Platanal", "DEPARTAMENTO": "LIMA", "POTENCIA_MW": 220.0, "TECNOLOGIA": "Hidráulica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Eólica Wayra I", "DEPARTAMENTO": "ICA", "POTENCIA_MW": 132.0, "TECNOLOGIA": "Eólica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Eólica Tres Hermanas", "DEPARTAMENTO": "ICA", "POTENCIA_MW": 97.0, "TECNOLOGIA": "Eólica", "ESTADO": "En Servicio"},
-                {"NO_CENTRAL": "Central Solar Tacna Solar", "DEPARTAMENTO": "TACNA", "POTENCIA_MW": 20.0, "TECNOLOGIA": "Solar", "ESTADO": "En Servicio"}
-            ]
-            
-            filtered = centrales
-            
-            # Filtrar por Departamento
-            dep_val = norm_filters.get("departamento") or norm_filters.get("no_departamento") or norm_filters.get("ubicacion")
-            if dep_val and dep_val not in ["sede nacional", "todas", "todos"]:
-                filtered = [c for c in filtered if normalize_str(dep_val) in normalize_str(c["DEPARTAMENTO"])]
-                
-            # Filtrar por Tecnología
-            tec_val = norm_filters.get("tecnologia") or norm_filters.get("ti_matriz") or norm_filters.get("categoria")
-            if tec_val and tec_val not in ["todas", "todos", "[]", ""]:
-                # Normalizar lista de tecnologías
-                clean_val = tec_val.replace("[", "").replace("]", "").replace("'", "").replace('"', "")
-                tech_list = [t.strip().lower() for t in clean_val.split(",") if t.strip()]
-                if tech_list:
-                    filtered = [c for c in filtered if c["TECNOLOGIA"].lower() in tech_list]
-                
-            return filtered
-            
-        elif "EESS" in table_name:
-            estaciones = [
-                {"NO_ESTACION": "GRIFO PRIMAX EL PINO", "DEPARTAMENTO": "LIMA", "PROVINCIA": "LIMA", "DISTRITO": "SAN LUIS", "LATITUD": -12.0721, "LONGITUD": -76.9934},
-                {"NO_ESTACION": "GRIFO REPSOL CHARCANI", "DEPARTAMENTO": "AREQUIPA", "PROVINCIA": "AREQUIPA", "DISTRITO": "CAYMA", "LATITUD": -16.3812, "LONGITUD": -71.5511},
-                {"NO_ESTACION": "GRIFO PETROPERU ILO", "DEPARTAMENTO": "MOQUEGUA", "PROVINCIA": "ILO", "DISTRITO": "ILO", "LATITUD": -17.6432, "LONGITUD": -71.3411},
-                {"NO_ESTACION": "GRIFO COSTI TUPAC AMARU", "DEPARTAMENTO": "LIMA", "PROVINCIA": "LIMA", "DISTRITO": "COMAS", "LATITUD": -11.9324, "LONGITUD": -77.0612}
-            ]
-            filtered = estaciones
-            dep_val = norm_filters.get("departamento") or norm_filters.get("no_departamento") or norm_filters.get("ubicacion")
-            if dep_val and dep_val not in ["sede nacional", "todas", "todos"]:
-                filtered = [e for e in filtered if normalize_str(dep_val) in normalize_str(e["DEPARTAMENTO"])]
-            return filtered
-            
-        else: # DEMANDA_DIARIA_ELEC
-            import datetime
-            data_list = []
-            base_date = datetime.date(2023, 10, 1)
-            for i in range(20):
-                date_str = (base_date + datetime.timedelta(days=i)).strftime("%Y-%m-%d")
-                weekday = (base_date + datetime.timedelta(days=i)).weekday()
-                factor = 1.05 if weekday < 5 else 0.95
-                mw = round(7100.0 * factor + (i * 12.0) % 250 - 100, 1)
-                gwh = round(mw * 24 / 1000 * 0.9, 2)
-                data_list.append({
-                    "FECHA": date_str,
-                    "DEMANDA_MAX_MW": mw,
-                    "GENERACION_GWH": gwh
-                })
-            return data_list
-            
-    return {"status": "error", "message": f"Herramienta {name} no soportada en mock."}
-
 # ----------------- Ejecución Local de Herramientas -----------------
 
 def run_local_tool(base_url, name, args):
     """
-    Ejecuta la herramienta correspondiente llamando a los endpoints REST del backend
-    y adaptando los esquemas si es necesario.
+    Ejecuta la herramienta correspondiente llamando primero al canal SSE (MCP oficial)
+    y cayendo a endpoints REST HTTP directos o catálogo de respaldo en caso de fallos.
     """
-    url = f"{base_url}/tools/{name}"
-    
-    # Adaptar parámetros para query_data (de MCP a REST)
-    if name == "query_data":
-        if "schema" in args:
-            args["schema_name"] = args.pop("schema")
-        if "table" in args:
-            args["table_name"] = args.pop("table")
-            
+    print(f"[BACKEND] Ejecutando herramienta {name!r} vía SSE...")
     try:
-        # get_unidades y list se llaman vía GET, los demás vía POST
-        if name in ["get_unidades", "list"]:
-            r = requests.get(url, params=args, timeout=20)
-        else:
-            r = requests.post(url, json=args, timeout=20)
-            
-        if r.status_code == 200:
-            return r.json()
-        else:
-            raise RuntimeError(f"Error del servidor MCP para la herramienta {name!r} (código {r.status_code}): {r.text}")
-    except Exception as e:
-        raise RuntimeError(f"Fallo crítico de conexión al ejecutar la herramienta MCP {name!r} en {url}: {str(e)}")
+        from semantic_registry import run_async_in_thread, run_tool_via_sse, normalize_tool_result
+        raw_res = run_async_in_thread(run_tool_via_sse(base_url, name, args))
+        result = normalize_tool_result(raw_res)
+        print(f"[BACKEND] Herramienta {name!r} ejecutada con éxito vía SSE.")
+        return result
+    except Exception as sse_err:
+        print(f"[BACKEND WARNING] Fallo al ejecutar {name!r} vía SSE: {sse_err}")
+        print("[BACKEND] Reintentando vía endpoints REST directos...")
+        
+        url = f"{base_url}/tools/{name}"
+        
+        # Adaptar parámetros para query_data (de MCP a REST)
+        if name == "query_data":
+            if "schema" in args:
+                args["schema_name"] = args["schema"]
+            if "table" in args:
+                args["table_name"] = args["table"]
+                
+        try:
+            # get_unidades y list se llaman vía GET, los demás vía POST
+            if name in ["get_unidades", "list"]:
+                r = requests.get(url, params=args, timeout=20)
+            else:
+                r = requests.post(url, json=args, timeout=20)
+                
+            if r.status_code == 200:
+                return r.json()
+            else:
+                raise RuntimeError(f"Error del servidor MCP para la herramienta {name!r} (código {r.status_code}): {r.text}")
+        except Exception as e:
+            raise RuntimeError(f"Fallo crítico de conexión al ejecutar la herramienta MCP {name!r} en {url}: {str(e)}")
 
 # ----------------- Enrutador de Resiliencia del LLM -----------------
 
@@ -529,20 +392,28 @@ async def stream_llm_response(messages, tools=None):
         except Exception as e:
             print(f"Error inyectando contexto de datos en prompt: {e}")
 
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY") or LLM_API_KEY
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    llm_key = (os.getenv("LLM_API_KEY") or LLM_API_KEY or "").strip()
     
-    # Detección automática del proveedor basado en la clave de API
-    if api_key and (api_key.startswith("AIzaSy") or "gemini" in api_key.lower()):
+    # Priorizar estrictamente GEMINI_API_KEY para conectar con Google AI Studio directamente
+    if gemini_key:
+        api_key = gemini_key
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        
-        # Seleccionar un único modelo oficial
         env_models = os.getenv("GEMINI_MODEL")
         if env_models:
+            # Elegir el primer modelo disponible (ej: gemini-2.5-flash)
             model = [m.strip() for m in env_models.split(",") if m.strip()][0]
         else:
             model = "gemini-2.5-flash"
         provider_name = "Google AI Studio (Gemini)"
+    elif llm_key and llm_key.startswith("sk-or-"):
+        api_key = llm_key
+        base_url = "https://openrouter.ai/api/v1"
+        model = "google/gemini-2.5-flash"
+        provider_name = "OpenRouter"
     else:
+        # Fallback si no hay claves válidas configuradas
+        api_key = llm_key or gemini_key
         base_url = "https://openrouter.ai/api/v1"
         model = "google/gemini-2.5-flash"
         provider_name = "OpenRouter"
@@ -937,8 +808,11 @@ async def start():
 
     # Cargar y almacenar herramientas del servidor en la sesión (Caché de MCP al arrancar)
     with cl.Step(name="Inicializando herramientas MCP", type="system") as step:
-        step.input = "Consultando catálogo de Osinergmin..."
-        openai_tools = fetch_tools_from_server(MCP_SERVER_URL)
+        try:
+            openai_tools = fetch_tools_from_server(MCP_SERVER_URL)
+        except Exception as e:
+            print(f"[BACKEND ERROR] No se pudieron obtener las herramientas del servidor MCP: {e}")
+            openai_tools = []
         
         # Definir la herramienta local de creación de gráficos
         local_chart_tool = {
@@ -1007,7 +881,7 @@ async def start():
                                         "properties": {
                                             "field": {"type": "string", "description": "Columna física a filtrar (ej: DEPARTAMENTO, TECNOLOGIA, ESTADO, FECHA)."},
                                             "operator": {"type": "string", "enum": ["equals", "in", "greater_than", "less_than"]},
-                                            "value": {"type": "any", "description": "Valor del filtro. Si el operador es 'in', debe ser un array de valores."}
+                                            "value": {"description": "Valor del filtro. Si el operador es 'in', debe ser un array de valores. Puede ser string o número."}
                                         },
                                         "required": ["field", "operator", "value"]
                                     },
@@ -1050,12 +924,21 @@ async def start():
         else:
             step.output = "⚠️ Advertencia: No se pudieron precargar las herramientas del servidor. Verifica la URL en .env"
 
-    # Cargar catálogo de datos gobernados en caché de sesión al arrancar
+    # Cargar catálogo de datos gobernados en caché de sesión al arrancar a través de get_semantic_catalog
     try:
-        catalogo = run_local_tool(MCP_SERVER_URL, "get_catalogo_datos", {})
-        if isinstance(catalogo, list):
-            cl.user_session.set("catalogo_completo", catalogo)
-            print(f"[BACKEND] Catálogo de datos cargado en sesión ({len(catalogo)} elementos).")
+        catalog_dict = get_semantic_catalog()
+        catalogo = [
+            {
+                "table_name": k,
+                "description": v.get("description", ""),
+                "NO_TABLA": k,
+                "DE_TABLA": v.get("description", ""),
+                "id_catalogo": int(v.get("id_catalogo") or 0)
+            }
+            for k, v in catalog_dict.get("tables", {}).items()
+        ]
+        cl.user_session.set("catalogo_completo", catalogo)
+        print(f"[BACKEND] Catálogo de datos cargado en sesión ({len(catalogo)} elementos desde Registro Semántico).")
     except Exception as ce:
         print(f"[BACKEND ERROR] No se pudo precargar el catálogo en sesión: {ce}")
 
@@ -1177,7 +1060,13 @@ async def setup_agent(settings):
 @cl.on_message
 async def main(message: cl.Message):
     print(f"\n[BACKEND] --- ON MESSAGE TRIGGERED --- Content: {message.content!r}")
+    print(f"[LLM INTERACTION] === NEW CHAT TURN ===")
+    print(f"[LLM INTERACTION] --- Raw User Query: {message.content!r}")
+    
     clean_query = message.content.strip().lower()
+    
+    # Guardar mensaje del usuario en sesión para inferencia de gráficos
+    cl.user_session.set("last_user_message", message.content)
         
     # Mantener el resultado de herramientas de turnos anteriores para permitir graficar datos persistentes
     cl.user_session.set("chart_generated_in_turn", False)
@@ -1213,9 +1102,11 @@ async def main(message: cl.Message):
     while True:
         # Obtener respuesta del LLM con el enrutador de resiliencia
         try:
+            print(f"[LLM INTERACTION] --- Preparing messages. History length: {len(history) if history else 0}")
             print("[BACKEND] Calling stream_llm_response...")
             stream, active_model = await stream_llm_response(history, openai_tools)
             print(f"[BACKEND] stream_llm_response returned successfully. Active model: {active_model}")
+            print(f"[LLM INTERACTION] --- Connection to LLM provider active. Model: {active_model}")
         except Exception as e:
             print(f"[BACKEND] stream_llm_response failed: {e}")
             await cl.Message(
@@ -1313,6 +1204,8 @@ async def main(message: cl.Message):
                 except Exception as je:
                     args = {"error": f"Invalid JSON arguments: {str(je)}", "raw": raw_args}
                     
+                print(f"[LLM INTERACTION] --- Assistant requested execution of tool: {name!r}")
+                print(f"[LLM INTERACTION] --- Tool arguments: {json.dumps(args, ensure_ascii=False)}")
                 print(f"[BACKEND] Executing tool: {name!r} with args: {args}")
                 if name == "crear_grafico":
                     async with cl.Step(name="Creando gráfico interactivo", type="tool") as step:
@@ -1340,9 +1233,56 @@ async def main(message: cl.Message):
                             
                         # Extraer query y presentation
                         query_dict = args.get("query", {})
-                        presentation_dict = args.get("presentation", {})
+                        presentation_dict = args.get("presentation") or {}
+                        if not isinstance(presentation_dict, dict):
+                            presentation_dict = {}
+                            
+                        # Fallback inteligente si presentation no está configurada o no tiene chart
+                        chart_spec = presentation_dict.get("chart") or {}
+                        chart_type = chart_spec.get("type", "none")
+                        
+                        # Detectar si el usuario pidió explícitamente un gráfico en el mensaje
+                        user_msg = cl.user_session.get("last_user_message", "")
+                        clean_user_msg = normalize_text(user_msg)
+                        chart_keywords = ["grafic", "tendencia", "curva", "evolucion", "plot", "gráfico", "grafique", "evolución", "barras", "lineas", "torta", "pie", "barra", "dispersión", "puntos"]
+                        wants_chart = (chart_type != "none") or any(kw in clean_user_msg for kw in chart_keywords)
+                        
+                        # Si la consulta tiene dimensiones y campos numéricos, SIEMPRE habilitamos la opción de gráfico
+                        dims = query_dict.get("dimensions", [])
+                        fields = query_dict.get("fields", [])
+                        
+                        if len(dims) > 0 and len(fields) > 0:
+                            if chart_type == "none":
+                                inferred_x = dims[0]
+                                inferred_y = fields[0]["name"]
+                                inferred_type = "line"
+                                if any(t in inferred_x.lower() for t in ["fecha", "date", "ano", "mes", "dia", "periodo"]):
+                                    inferred_type = "line"
+                                else:
+                                    inferred_type = "bar"
+                                
+                                presentation_dict["chart"] = {
+                                    "type": inferred_type,
+                                    "x": inferred_x,
+                                    "y": inferred_y,
+                                    "series": dims[1] if len(dims) > 1 else None
+                                }
+                            else:
+                                if not chart_spec.get("x"):
+                                    chart_spec["x"] = dims[0]
+                                if not chart_spec.get("y"):
+                                    chart_spec["y"] = fields[0]["name"]
+                                presentation_dict["chart"] = chart_spec
+                                
+                            # Configurar la vista inicial predeterminada en base a la intención del usuario
+                            presentation_dict["default_view"] = "chart" if wants_chart else "table"
+                        else:
+                            # Si no se puede graficar, forzar vista de tabla y desactivar gráfico
+                            presentation_dict["chart"] = {"type": "none"}
+                            presentation_dict["default_view"] = "table"
                         
                         # Ejecutar la consulta en el OSAM Gateway ( DuckDB + RLS )
+                        print(f"[OSAM GATEWAY] Executing OSAM Query translation and database fetching...")
                         result = execute_osam_query(query_dict, user_role, user_geography)
                         
                         if result.get("status") == "success":
@@ -1363,28 +1303,90 @@ async def main(message: cl.Message):
                             # Guardar en sesión de Chainlit para inyección o referencia posterior
                             cl.user_session.set("last_osam_payload", result)
                             
+                            # Loguear la generación exitosa de componentes
+                            print(f"[COMPONENT GENERATION] === SUCCESS: OSAM Query executed successfully ===")
+                            db_rows = len(result["report"]["data"])
+                            print(f"[COMPONENT GENERATION] --- Data rows fetched from DuckDB: {db_rows}")
+                            
+                            chart_conf = presentation_dict.get("chart") or {}
+                            chart_t = chart_conf.get("type", "none")
+                            has_chart_comp = (chart_t != "none")
+                            
+                            print(f"[COMPONENT GENERATION] --- Components status:")
+                            print(f"  - Table Component: GENERATED (Columns count: {len(result['report']['columns'])})")
+                            print(f"  - Chart Component: {'GENERATED' if has_chart_comp else 'OMITTED'} (Type: {chart_t}, X: {chart_conf.get('x', 'N/A')}, Y: {chart_conf.get('y', 'N/A')})")
+                            print(f"  - Provenance/Trazabilidad Component: GENERATED (Query Hash: {result['report']['provenance']['query_hash']})")
+                            
                             step.output = f"✅ Consulta ejecutada con éxito en DuckDB.\n" \
                                           f"- Registros recuperados: {len(result['report']['data'])}\n" \
                                           f"- Hash de Consulta: {result['report']['provenance']['query_hash']}\n" \
                                           f"- RLS Autorizado para geografía: {user_geography}"
                         else:
+                            print(f"[COMPONENT GENERATION] --- FAILED: query_data_osam execution returned error: {result.get('message')}")
                             step.output = f"❌ Error ejecutando consulta OSAM: {result.get('message')}"
                 else:
                     # Crear un paso de ejecución en la UI de Chainlit para feedback al usuario
                     async with cl.Step(name=f"Ejecutando: {name}", type="tool") as step:
                         step.input = args
                         
-                        # Llamar localmente al servidor de Osinergmin
-                        result = run_local_tool(MCP_SERVER_URL, name, args)
-                        if name == "get_catalogo_datos":
-                            catalogo_consultado_en_este_turno = True
-                        print(f"[BACKEND] Tool {name!r} returned output of length: {len(str(result))} (sample: {str(result)[:200]}...)")
-                        
-                        # Mostrar resultados en la UI
-                        if isinstance(result, list):
-                            step.output = f"Se recuperaron {len(result)} registros.\n\n" + json.dumps(result[:3], indent=2) + "\n\n*(mostrando primeros 3 registros)*"
-                        else:
-                            step.output = json.dumps(result, indent=2)
+                        try:
+                            # Llamar al servidor de Osinergmin
+                            result = run_local_tool(MCP_SERVER_URL, name, args)
+                            if name == "get_catalogo_datos":
+                                catalogo_consultado_en_este_turno = True
+                            print(f"[BACKEND] Tool {name!r} returned output of length: {len(str(result))} (sample: {str(result)[:200]}...)")
+                            
+                            # Mostrar resultados en la UI
+                            if isinstance(result, list):
+                                step.output = f"Se recuperaron {len(result)} registros.\n\n" + json.dumps(result[:3], indent=2) + "\n\n*(mostrando primeros 3 registros)*"
+                            else:
+                                step.output = json.dumps(result, indent=2)
+                        except Exception as e:
+                            print(f"[BACKEND ERROR] Error al ejecutar la herramienta real {name!r}: {e}")
+                            
+                            # Manejo de fallos con degradación segura de metadatos
+                            if name == "get_catalogo_datos":
+                                catalogo_consultado_en_este_turno = True
+                                result = cl.user_session.get("catalogo_completo") or []
+                                step.output = f"⚠️ Nota: El servidor MCP en vivo no responde (Timeout). Utilizando catálogo de respaldo local.\n\n" + json.dumps(result[:3], indent=2) + "\n\n*(mostrando primeros 3 registros)*"
+                            elif name == "get_detalle_catalogo_datos":
+                                # Buscar los metadatos de las columnas en la caché semántica local
+                                target_id = args.get("id_catalogo") or 0
+                                table_name_arg = args.get("table_name", "").upper()
+                                
+                                # Intentar buscar por ID de catálogo o por nombre
+                                catalog_dict = get_semantic_catalog()
+                                found_cols = []
+                                found_table = ""
+                                
+                                for t_name, t_data in catalog_dict.get("tables", {}).items():
+                                    t_id = t_data.get("id_catalogo") or t_data.get("ID_CATALOGO_DATO")
+                                    if (target_id and t_id and int(t_id) == int(target_id)) or (table_name_arg and t_name == table_name_arg):
+                                        found_cols = t_data.get("columns", [])
+                                        found_table = t_name
+                                        break
+                                        
+                                if found_cols:
+                                    result = {
+                                        "table_name": found_table,
+                                        "columns": [
+                                            {
+                                                "name": col["name"],
+                                                "type": col.get("type", "VARCHAR2"),
+                                                "description": col.get("description", ""),
+                                                "show": True
+                                            }
+                                            for col in found_cols
+                                        ]
+                                    }
+                                    step.output = f"⚠️ Nota: El servidor MCP en vivo no responde (Timeout). Utilizando columnas de respaldo local para {found_table}.\n\n" + json.dumps(result, indent=2)
+                                else:
+                                    result = {"error": f"No se pudieron obtener columnas para el catálogo {target_id or table_name_arg}."}
+                                    step.output = f"❌ Error: {e}\nNo hay columnas en la caché local para esta tabla."
+                            else:
+                                # Si falla get_unidades u otra de datos en vivo, devolvemos un mensaje de error limpio al LLM
+                                result = {"error": f"La herramienta {name} no pudo completarse debido a un fallo de red o timeout en el servidor MCP."}
+                                step.output = f"❌ Error de Conexión: {e}"
                         
                 # Registrar el resultado de la herramienta en el historial del chat
                 history.append({
@@ -1408,6 +1410,95 @@ async def main(message: cl.Message):
             })
             cl.user_session.set("history", history)
             
+            # --- VALIDACIÓN Y LOGS DE COMPONENTES GENERADOS EN EL TEXTO ---
+            print(f"[LLM INTERACTION] --- Final Assistant text response saved in session history.")
+            
+            # Buscar json-osam block
+            if "```json-osam" in full_text:
+                print(f"[COMPONENT GENERATION] --- Found code block: 'json-osam' in message content.")
+                try:
+                    # Extraer JSON
+                    start_pos = full_text.find("```json-osam") + 12
+                    end_pos = full_text.find("```", start_pos)
+                    if end_pos != -1:
+                        json_str = full_text[start_pos:end_pos].strip()
+                        parsed_osam = json.loads(json_str)
+                        print(f"[COMPONENT GENERATION] --- Parsed json-osam block successfully:")
+                        
+                        report_data = parsed_osam.get("report") or {}
+                        analysis_data = parsed_osam.get("analysis") or {}
+                        
+                        # --- AUTO-REPARACIÓN DE PRESENTACIÓN Y CASING ---
+                        saved_payload = cl.user_session.get("last_osam_payload") or {}
+                        saved_report = saved_payload.get("report") or {}
+                        saved_presentation = saved_report.get("presentation")
+                        
+                        if saved_presentation:
+                            curr_pres = report_data.get("presentation") or {}
+                            curr_chart = curr_pres.get("chart") or {}
+                            
+                            # Si falta o está desactivado
+                            if not curr_chart or curr_chart.get("type", "none") == "none":
+                                report_data["presentation"] = saved_presentation
+                                print("[COMPONENT GENERATION] --- Auto-repair: Re-injected presentation from session payload.")
+                            else:
+                                # Alinear casing de los campos x e y en el chart con los nombres reales en columns
+                                col_ids_upper = {col["id"].upper(): col["id"] for col in report_data.get("columns", [])}
+                                
+                                x_field = curr_chart.get("x")
+                                if x_field and x_field.upper() in col_ids_upper:
+                                    curr_chart["x"] = col_ids_upper[x_field.upper()]
+                                    
+                                y_field = curr_chart.get("y")
+                                if y_field and y_field.upper() in col_ids_upper:
+                                    curr_chart["y"] = col_ids_upper[y_field.upper()]
+                                    
+                                curr_pres["chart"] = curr_chart
+                                report_data["presentation"] = curr_pres
+                                
+                            parsed_osam["report"] = report_data
+                            
+                            # Re-serializar y actualizar la respuesta
+                            new_json_str = json.dumps(parsed_osam, ensure_ascii=False, indent=2)
+                            new_full_text = full_text[:start_pos] + "\n" + new_json_str + "\n" + full_text[end_pos:]
+                            full_text = new_full_text
+                            
+                            # Actualizar el mensaje de Chainlit
+                            if msg:
+                                msg.content = new_full_text
+                                await msg.update()
+                                print("[COMPONENT GENERATION] --- Auto-repair: Updated client message with repaired presentation schema.")
+                        
+                        # Recargar report_data del objeto parseado (posiblemente reparado)
+                        report_data = parsed_osam.get("report") or {}
+                        
+                        print(f"  - Report status: Present (Data records: {len(report_data.get('data', []))})")
+                        print(f"  - Columns count: {len(report_data.get('columns', []))}")
+                        
+                        chart_info = report_data.get("presentation", {}).get("chart", {})
+                        print(f"  - Chart status: {chart_info.get('type', 'none')} (X: {chart_info.get('x')}, Y: {chart_info.get('y')})")
+                        
+                        insights_list = analysis_data.get("insights", [])
+                        print(f"  - AI Insights count: {len(insights_list)}")
+                        for idx, ins in enumerate(insights_list):
+                            print(f"    Insight {idx+1}: [{ins.get('type')}] {ins.get('text')}")
+                except Exception as parse_err:
+                    print(f"[COMPONENT ERROR] --- Failed to parse 'json-osam' block: {parse_err}")
+            else:
+                print(f"[COMPONENT WARNING] --- Message does NOT contain json-osam block. Only plain text rendered.")
+            
+            if "```json-chart" in full_text:
+                print(f"[COMPONENT GENERATION] --- Found code block: 'json-chart' (matplotlib fallback) in message content.")
+                try:
+                    start_pos = full_text.find("```json-chart") + 13
+                    end_pos = full_text.find("```", start_pos)
+                    if end_pos != -1:
+                        json_str = full_text[start_pos:end_pos].strip()
+                        parsed_chart = json.loads(json_str)
+                        print(f"[COMPONENT GENERATION] --- Parsed json-chart block successfully: Type: {parsed_chart.get('type')}")
+                except Exception as parse_err:
+                    print(f"[COMPONENT ERROR] --- Failed to parse 'json-chart' block: {parse_err}")
+            
             # Guardar en caché omitido (caché deshabilitada)
             
             # Registrar en log_uso.txt
@@ -1418,9 +1509,16 @@ async def main(message: cl.Message):
             last_result = cl.user_session.get("last_tool_result")
             chart_already_generated = cl.user_session.get("chart_generated_in_turn", False)
             
-            if not chart_already_generated and any(kw in clean_query for kw in chart_keywords) and isinstance(last_result, list) and len(last_result) > 0:
-                chart_path = try_generate_chart(last_result, message.content)
-                chart_json = try_generate_chart_json(last_result, message.content)
+            # Extraer lista de registros de forma robusta
+            data_list = None
+            if isinstance(last_result, list):
+                data_list = last_result
+            elif isinstance(last_result, dict):
+                data_list = last_result.get("report", {}).get("data")
+                
+            if not chart_already_generated and any(kw in clean_query for kw in chart_keywords) and isinstance(data_list, list) and len(data_list) > 0:
+                chart_path = try_generate_chart(data_list, message.content)
+                chart_json = try_generate_chart_json(data_list, message.content)
                 
                 chart_block = ""
                 if chart_json:
@@ -1453,26 +1551,24 @@ async def main(message: cl.Message):
                         
             # 1. Obtener la lista completa de tablas del catálogo que tengamos en sesión
             catalogo_completo = cl.user_session.get("catalogo_completo")
-            if (not isinstance(catalogo_completo, list) or 
-                len(catalogo_completo) == 0 or 
-                (len(catalogo_completo) > 0 and not any(k in catalogo_completo[0] for k in ["NO_TABLA", "table_name"]))):
-                try:
-                    print("[BACKEND] Intentando recuperar catálogo del servidor real de MCP para el escaneo de datasets...")
-                    catalogo_completo = run_local_tool(MCP_SERVER_URL, "get_catalogo_datos", {})
-                    if isinstance(catalogo_completo, list) and len(catalogo_completo) > 0:
-                        cl.user_session.set("catalogo_completo", catalogo_completo)
-                        print(f"[BACKEND] Catálogo real recuperado exitosamente ({len(catalogo_completo)} elementos) para escaneo.")
-                except Exception as ex:
-                    print(f"[BACKEND WARNING] Error al recuperar catálogo real: {ex}")
-                    catalogo_completo = None
-                    
             if not isinstance(catalogo_completo, list) or len(catalogo_completo) == 0:
-                # Cargar dinámicamente desde el Registro Semántico real para evitar mocks
-                catalog_dict = get_semantic_catalog()
-                catalogo_completo = [
-                    {"table_name": k, "description": v.get("description", "")}
-                    for k, v in catalog_dict.get("tables", {}).items()
-                ]
+                try:
+                    catalog_dict = get_semantic_catalog()
+                    catalogo_completo = [
+                        {
+                            "table_name": k,
+                            "description": v.get("description", ""),
+                            "NO_TABLA": k,
+                            "DE_TABLA": v.get("description", ""),
+                            "id_catalogo": int(v.get("id_catalogo") or 0)
+                        }
+                        for k, v in catalog_dict.get("tables", {}).items()
+                    ]
+                    cl.user_session.set("catalogo_completo", catalogo_completo)
+                    print(f"[BACKEND] Catálogo cargado en sesión ({len(catalogo_completo)} elementos desde Registro Semántico) para escaneo.")
+                except Exception as ex:
+                    print(f"[BACKEND WARNING] Error al cargar catálogo de escaneo: {ex}")
+                    catalogo_completo = []
                 
             # 2. Buscar menciones de tablas en el texto final de la respuesta del asistente (full_text)
             import re

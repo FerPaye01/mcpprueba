@@ -28,22 +28,53 @@ export function VegaLiteChart({ data, chartSpec, title }: VegaLiteChartProps) {
       mark = 'arc';
     }
 
+    // Obtener las claves reales del primer objeto de datos (ignora mayúsculas/minúsculas y caracteres especiales de agregación como sum(x))
+    const firstRow = data[0] || {};
+    const dataKeys = Object.keys(firstRow);
+
+    const findBestMatch = (field: string) => {
+      if (!field) return '';
+      const cleaned = field.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      
+      // 1. Coincidencia exacta (insensible a mayúsculas)
+      const exactMatch = dataKeys.find(k => k.toLowerCase() === field.toLowerCase());
+      if (exactMatch) return exactMatch;
+      
+      // 2. Coincidencia limpia (quitando paréntesis o funciones como SUM, AVG)
+      const cleanMatch = dataKeys.find(k => k.toLowerCase() === cleaned);
+      if (cleanMatch) return cleanMatch;
+      
+      // 3. Coincidencia por subcadena (si la clave de los datos está dentro del campo solicitado o viceversa)
+      const substringMatch = dataKeys.find(k => {
+        const kLower = k.toLowerCase();
+        const fLower = field.toLowerCase();
+        return fLower.includes(kLower) || kLower.includes(fLower);
+      });
+      if (substringMatch) return substringMatch;
+      
+      return field; // por defecto si no hay coincidencia
+    };
+
+    const xField = findBestMatch(chartSpec.x);
+    const yField = findBestMatch(chartSpec.y);
+    const seriesField = chartSpec.series ? findBestMatch(chartSpec.series) : null;
+
     const encoding: any = {
       x: {
-        field: chartSpec.x,
+        field: xField,
         type: 'nominal',
         axis: { 
           labelAngle: -45, 
-          title: chartSpec.x.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          title: chartSpec.x ? chartSpec.x.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
           labelFont: 'Poppins, sans-serif',
           titleFont: 'Poppins, sans-serif'
         }
       },
       y: {
-        field: chartSpec.y,
+        field: yField,
         type: 'quantitative',
         axis: { 
-          title: chartSpec.y.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          title: chartSpec.y ? chartSpec.y.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
           labelFont: 'Poppins, sans-serif',
           titleFont: 'Poppins, sans-serif'
         }
@@ -52,9 +83,9 @@ export function VegaLiteChart({ data, chartSpec, title }: VegaLiteChartProps) {
 
     // If it's a pie chart, restructure encoding
     if (chartSpec.type === 'pie') {
-      encoding.theta = { field: chartSpec.y, type: 'quantitative' };
+      encoding.theta = { field: yField, type: 'quantitative' };
       encoding.color = { 
-        field: chartSpec.x, 
+        field: xField, 
         type: 'nominal',
         legend: {
           labelFont: 'Poppins, sans-serif',
@@ -63,12 +94,12 @@ export function VegaLiteChart({ data, chartSpec, title }: VegaLiteChartProps) {
       };
       delete encoding.x;
       delete encoding.y;
-    } else if (chartSpec.series) {
+    } else if (seriesField) {
       encoding.color = {
-        field: chartSpec.series.toLowerCase(),
+        field: seriesField,
         type: 'nominal',
         legend: { 
-          title: chartSpec.series.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          title: chartSpec.series ? chartSpec.series.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
           labelFont: 'Poppins, sans-serif',
           titleFont: 'Poppins, sans-serif'
         }
