@@ -1,4 +1,4 @@
-# Inventario de Versiones — OpenEnergy / OSAM v2
+# Inventario de Versiones — OpenEnergy 
 > Última revisión: 2026-06-10 | Responsable: Equipo TI Osinergmin
 
 ---
