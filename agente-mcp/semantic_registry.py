@@ -157,17 +157,28 @@ def run_async_in_thread(coro):
 def normalize_tool_result(result):
     """
     Desempaqueta el resultado de tools/call de MCP si viene envuelto en content text.
+    Maneja tanto listas completas serializadas como múltiples elementos de contenido.
     """
     if isinstance(result, dict) and "content" in result:
         content_list = result["content"]
         if isinstance(content_list, list) and len(content_list) > 0:
-            first_item = content_list[0]
-            if isinstance(first_item, dict) and "text" in first_item:
-                text_val = first_item["text"]
-                try:
-                    return json.loads(text_val)
-                except Exception:
-                    return text_val
+            parsed_items = []
+            for item in content_list:
+                if isinstance(item, dict) and "text" in item:
+                    text_val = item["text"]
+                    try:
+                        parsed_val = json.loads(text_val)
+                        if isinstance(parsed_val, list):
+                            parsed_items.extend(parsed_val)
+                        else:
+                            parsed_items.append(parsed_val)
+                    except Exception:
+                        parsed_items.append(text_val)
+            
+            if parsed_items:
+                if len(parsed_items) > 1:
+                    return parsed_items
+                return parsed_items[0]
     return result
 
 
@@ -241,7 +252,10 @@ async def fetch_catalog_via_sse(base_url):
                         "description": col_desc
                     })
                     
+            schema = table_info.get("schema") or table_info.get("NO_ESQUEMA_ORIGEN") or "ES_DATGOB_CV"
             catalog["tables"][table_name] = {
+                "id_catalogo": id_catalogo,
+                "schema": schema,
                 "description": description,
                 "columns": columns_mapped
             }
@@ -253,112 +267,25 @@ async def fetch_catalog_via_sse(base_url):
 def build_catalog_from_mcp():
     """
     Retorna la lista de tablas y columnas físicas con sus descripciones
-    intentando primero vía canal SSE (MCP oficial) y cayendo a HTTP REST en caso de fallos.
+    utilizando únicamente el canal estándar SSE (MCP oficial).
     """
     if not MCP_SERVER_URL:
         raise RuntimeError("La variable de entorno MCP_SERVER_URL no está configurada.")
 
     print(f"[SEMANTIC REGISTRY] Intentando cargar metadatos físicos vía SSE desde {MCP_SERVER_URL}...")
-    sse_error_msg = None
     try:
         catalog = run_async_in_thread(fetch_catalog_via_sse(MCP_SERVER_URL))
         print("[SEMANTIC REGISTRY] Catálogo físico obtenido exitosamente desde SSE.")
         return catalog
     except Exception as sse_err:
-        sse_error_msg = str(sse_err)
         print(f"[SEMANTIC REGISTRY WARNING] Fallo al conectar vía SSE: {sse_err}")
-        print("[SEMANTIC REGISTRY] Reintentando obtener metadatos vía endpoints HTTP REST directos...")
-
-    # Si llegamos aquí, el intento SSE falló. Intentamos vía HTTP REST
-    url_tables = f"{MCP_SERVER_URL}/tools/get_catalogo_datos"
-    rest_error_msg = None
-    try:
-        r = requests.post(url_tables, json={}, timeout=10)
-        if r.status_code != 200:
-            raise RuntimeError(f"El servidor MCP retornó código {r.status_code} al leer tablas.")
-        tables_list = r.json()
-
-        if not isinstance(tables_list, list):
-            raise RuntimeError("El formato de respuesta de get_catalogo_datos no es una lista válida.")
-
-        catalog = {"tables": {}}
-
-        # 2. Para cada tabla, obtener sus columnas con sus descripciones (DE_COLUMNA)
-        for table_info in tables_list:
-            table_name = table_info.get("table_name") or table_info.get("NO_TABLA")
-            description = table_info.get("description") or table_info.get("DE_TABLA") or f"Tabla {table_name}"
-            
-            if not table_name:
-                continue
-
-            table_name = table_name.upper()
-            
-            url_columns = f"{MCP_SERVER_URL}/tools/get_detalle_catalogo_datos"
-            try:
-                id_catalogo = table_info.get("id_catalogo") or table_info.get("ID_CATALOGO_DATO")
-                payload = {}
-                if id_catalogo is not None:
-                    payload = {"id_catalogo": int(id_catalogo)}
-                else:
-                    payload = {"table_name": table_name}
-                    
-                r_col = requests.post(url_columns, json=payload, timeout=10)
-                if r_col.status_code != 200:
-                    print(f"[SEMANTIC REGISTRY WARNING] No se pudo obtener columnas para {table_name} (payload: {payload}).")
-                    continue
-                details = r_col.json()
-            except Exception as ex:
-                print(f"[SEMANTIC REGISTRY WARNING] Error consultando columnas de {table_name}: {ex}")
-                continue
-
-            columns_raw = details.get("columns", [])
-            columns_mapped = []
-
-            for col in columns_raw:
-                col_name = col.get("name") or col.get("NO_COLUMNA")
-                col_type = col.get("type") or col.get("TI_DATO", "VARCHAR2").upper()
-                col_desc = col.get("description") or col.get("DE_COLUMNA") or f"Columna {col_name}"
-                show = col.get("show") or col.get("BO_MOSTRAR")
-                if show is None:
-                    show = True
-                else:
-                    show = str(show).upper() in ["TRUE", "1", "Y", "SI"]
-
-                if not col_name:
-                    continue
-
-                if show:
-                    columns_mapped.append({
-                        "name": col_name.upper(),
-                        "type": col_type,
-                        "description": col_desc
-                    })
-
-            catalog["tables"][table_name] = {
-                "description": description,
-                "columns": columns_mapped
-            }
-
-        print("[SEMANTIC REGISTRY] Catálogo físico obtenido exitosamente desde endpoints HTTP REST directos.")
-        return catalog
-
-    except Exception as rest_err:
-        rest_error_msg = str(rest_err)
-        print(f"[SEMANTIC REGISTRY WARNING] Fallo al conectar vía HTTP REST: {rest_err}")
-
-    # Si ambos fallaron, lanzamos un error que combine ambos mensajes detallados
-    raise RuntimeError(
-        f"Fallo de conexión múltiple al servidor MCP:\n"
-        f"  - Canal SSE: {sse_error_msg}\n"
-        f"  - Canal HTTP REST: {rest_error_msg}"
-    )
+        raise RuntimeError(f"Fallo de conexión al servidor MCP a través del canal oficial SSE: {sse_err}")
 
 def get_semantic_catalog(force_refresh=False):
     """
     Retorna el Catálogo Físico de Datos con sus descripciones.
     Usa caché para evitar llamadas de red redundantes.
-    Si el servidor MCP físico está offline, carga el archivo local semantic_catalog.json
-    como respaldo seguro para mantener el prototipo 100% operativo.
+    Requiere obligatoriamente que el servidor MCP esté activo.
     """
     global _cached_catalog
     if _cached_catalog is not None and not force_refresh:
@@ -368,61 +295,7 @@ def get_semantic_catalog(force_refresh=False):
         _cached_catalog = build_catalog_from_mcp()
         print("[SEMANTIC REGISTRY] Catálogo físico obtenido exitosamente desde el servidor MCP real.")
     except Exception as e:
-        print(f"[SEMANTIC REGISTRY WARNING] Fallo al conectar al servidor MCP: {e}")
-        print("[SEMANTIC REGISTRY] Intentando cargar catálogo local de respaldo (semantic_catalog.json)...")
-        try:
-            catalog_path = os.path.join(current_dir, "semantic_catalog.json")
-            if os.path.exists(catalog_path):
-                with open(catalog_path, "r", encoding="utf-8") as f:
-                    raw_cached = json.load(f)
-                
-                # Adaptar formato de semantic_catalog.json al formato esperado por la aplicación y el gateway
-                adapted_catalog = {}
-                for t_name, t_data in raw_cached.get("tables", {}).items():
-                    columns_mapped = []
-                    
-                    # Cargar medidas
-                    for m_name, m_data in t_data.get("measures", {}).items():
-                        col_physical_name = m_name.upper()
-                        formula = m_data.get("formula", "")
-                        import re
-                        match = re.search(r'\((.*?)\)', formula)
-                        if match:
-                            col_physical_name = match.group(1).upper()
-                            
-                        columns_mapped.append({
-                            "name": col_physical_name,
-                            "type": "NUMBER",
-                            "description": m_data.get("description", "")
-                        })
-                    
-                    # Cargar dimensiones
-                    for d_name, d_data in t_data.get("dimensions", {}).items():
-                        columns_mapped.append({
-                            "name": d_name.upper(),
-                            "type": d_data.get("type", "nominal"),
-                            "description": d_data.get("description", "")
-                        })
-                        
-                    # Eliminar duplicados por nombre de columna
-                    unique_cols = {}
-                    for col in columns_mapped:
-                        unique_cols[col["name"]] = col
-                        
-                    adapted_catalog[t_name.upper()] = {
-                        "description": t_data.get("description", f"Tabla {t_name}"),
-                        "columns": list(unique_cols.values()),
-                        "id_catalogo": int(t_data.get("id_catalogo") or t_data.get("ID_CATALOGO_DATO") or 0)
-                    }
-                
-                # Formatear contenedor final
-                _cached_catalog = {"tables": adapted_catalog}
-                print(f"[SEMANTIC REGISTRY] Catálogo de respaldo local cargado exitosamente ({len(_cached_catalog['tables'])} tablas).")
-            else:
-                print("[SEMANTIC REGISTRY ERROR] No se encontró el archivo de respaldo semantic_catalog.json.")
-                raise e
-        except Exception as file_err:
-            print(f"[SEMANTIC REGISTRY ERROR] Error crítico leyendo el catálogo local de respaldo: {file_err}")
-            raise e
-            
+        print(f"[SEMANTIC REGISTRY ERROR] Fallo crítico al conectar al servidor MCP: {e}")
+        raise e
+        
     return _cached_catalog

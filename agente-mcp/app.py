@@ -184,44 +184,51 @@ def is_rate_limited():
 def fetch_tools_from_server(base_url):
     """
     Obtiene la lista de herramientas del servidor Osinergmin
-    y las mapea al formato de tools (funciones) que espera la API de OpenAI/OpenRouter.
+    utilizando el canal oficial SSE de MCP.
     """
-    url = f"{base_url}/tools/list"
-    try:
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            raw_tools = r.json()
-            openai_tools = []
+    from semantic_registry import run_async_in_thread, CustomSseMcpClient
+    
+    async def get_tools_async():
+        sse_url = base_url if base_url.endswith("/sse") else f"{base_url}/sse"
+        client = CustomSseMcpClient(sse_url)
+        try:
+            await client.connect()
+            await client.initialize()
+            tools = await client.list_tools()
+            return tools
+        finally:
+            await client.close()
             
-            for tool in raw_tools:
-                name = tool.get("name")
-                desc = tool.get("description", "")
-                schema = tool.get("inputSchema", {})
-                
-                openai_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "description": desc,
-                        "parameters": {
-                            "type": schema.get("type", "object"),
-                            "properties": schema.get("properties", {}),
-                            "required": schema.get("required", [])
-                        }
+    try:
+        raw_tools = run_async_in_thread(get_tools_async())
+        openai_tools = []
+        
+        for tool in raw_tools:
+            name = tool.get("name")
+            desc = tool.get("description", "")
+            schema = tool.get("inputSchema", {})
+            
+            openai_tools.append({
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": desc,
+                    "parameters": {
+                        "type": schema.get("type", "object"),
+                        "properties": schema.get("properties", {}),
+                        "required": schema.get("required", [])
                     }
-                })
-            return openai_tools
-        else:
-            raise RuntimeError(f"Error al listar herramientas del servidor MCP: Código {r.status_code}")
+                }
+            })
+        return openai_tools
     except Exception as e:
-        raise RuntimeError(f"Fallo crítico de conexión al servidor MCP real en {url}: {str(e)}")
+        raise RuntimeError(f"Fallo crítico de conexión al servidor MCP real vía SSE en {base_url}: {str(e)}")
 
 # ----------------- Ejecución Local de Herramientas -----------------
 
 def run_local_tool(base_url, name, args):
     """
-    Ejecuta la herramienta correspondiente llamando primero al canal SSE (MCP oficial)
-    y cayendo a endpoints REST HTTP directos o catálogo de respaldo en caso de fallos.
+    Ejecuta la herramienta correspondiente llamando al canal estándar SSE (MCP oficial).
     """
     print(f"[BACKEND] Ejecutando herramienta {name!r} vía SSE...")
     try:
@@ -231,31 +238,8 @@ def run_local_tool(base_url, name, args):
         print(f"[BACKEND] Herramienta {name!r} ejecutada con éxito vía SSE.")
         return result
     except Exception as sse_err:
-        print(f"[BACKEND WARNING] Fallo al ejecutar {name!r} vía SSE: {sse_err}")
-        print("[BACKEND] Reintentando vía endpoints REST directos...")
-        
-        url = f"{base_url}/tools/{name}"
-        
-        # Adaptar parámetros para query_data (de MCP a REST)
-        if name == "query_data":
-            if "schema" in args:
-                args["schema_name"] = args["schema"]
-            if "table" in args:
-                args["table_name"] = args["table"]
-                
-        try:
-            # get_unidades y list se llaman vía GET, los demás vía POST
-            if name in ["get_unidades", "list"]:
-                r = requests.get(url, params=args, timeout=20)
-            else:
-                r = requests.post(url, json=args, timeout=20)
-                
-            if r.status_code == 200:
-                return r.json()
-            else:
-                raise RuntimeError(f"Error del servidor MCP para la herramienta {name!r} (código {r.status_code}): {r.text}")
-        except Exception as e:
-            raise RuntimeError(f"Fallo crítico de conexión al ejecutar la herramienta MCP {name!r} en {url}: {str(e)}")
+        print(f"[BACKEND ERROR] Fallo al ejecutar {name!r} vía SSE: {sse_err}")
+        raise RuntimeError(f"Fallo de conexión al ejecutar la herramienta MCP {name!r} vía SSE: {sse_err}")
 
 # ----------------- Enrutador de Resiliencia del LLM -----------------
 
@@ -330,38 +314,48 @@ async def stream_llm_response(messages, tools=None):
             
             datasets_str = ", ".join(datasets_info) if datasets_info else "Ninguno"
             
-            # Inyectar el Registro Semántico de OpenEnergy
-            catalog = get_semantic_catalog()
-            catalog_str = json.dumps(catalog, indent=2)
-
+            # Construir contexto de filtros activos
             filtros_context = (
                 f"\n\nFILTROS ACTIVOS SELECCIONADOS POR EL USUARIO EN EL SIDEBAR:\n"
                 f"- Geografía/Ubicación: {ubicacion}\n"
                 f"- Periodo: {periodo}\n"
                 f"- Matriz Energética (Categorías): {categoria_str or 'Todas'}\n"
                 f"- Datasets/Tablas Activos e Importados: {datasets_str}\n"
-                f"\n--- REGISTRO SEMÁNTICO DE OPENENERGY (Métricas y Dimensiones Disponibles) ---\n"
-                f"{catalog_str}\n"
-                f"\n🔴 REGLAS CRÍTICAS DE CONSULTA DE DATOS Y GENERACIÓN DE RESPUESTAS (OSAM v1):\n"
-                f"1. Si el usuario te pide datos, consultas, comparaciones, curvas o gráficos sobre generación, demanda o grifos/estaciones de servicio (EESS), DEBES invocar la herramienta `query_data_osam` pasándole la estructura lógica de `query` y la de `presentation` adecuadas en base al Registro Semántico anterior.\n"
-                f"2. Queda prohibido inventar o alucinar nombres de campos. Usa exactamente los nombres de dimensiones y medidas descritos en el Registro Semántico.\n"
-                f"3. Una vez que `query_data_osam` te retorne el bloque 'report' con los datos reales de DuckDB, redacta tus interpretaciones ejecutivas en texto libre (esta es tu explicación analítica probabilística).\n"
-                f"4. Al final de tu mensaje, DEBES inyectar de forma obligatoria el metamodelo OSAM v1 consolidado dentro de un único bloque de código Markdown marcado con la etiqueta `json-osam`.\n"
-                f"El JSON de `json-osam` debe contener dos propiedades principales:\n"
-                f"  - 'report': El objeto exacto que te devolvió la herramienta `query_data_osam` en su campo 'report'. NUNCA alteres ni inventes los datos de esta sección.\n"
-                f"  - 'analysis': Un objeto conteniendo la propiedad 'insights' que es un array de objetos con las claves 'type' (ej: 'trend', 'comparison') y 'text' (tus conclusiones redactadas).\n"
-                f"Ejemplo de formato de respuesta requerido al final:\n"
-                f"Aquí tienes el análisis... [Tus interpretaciones en texto libre] ...\n"
+                f"\n🔴 INSTRUCCIONES PARA LA CONSULTA DE DATOS Y RENDERIZADO EN LA INTERFAZ:\n"
+                f"1. Si el usuario solicita datos, tendencias, números o ver qué datos tienes disponibles, y no conoces qué tablas existen, DEBES llamar primero a la herramienta `get_catalogo_datos`.\n"
+                f"2. Una vez identificada la tabla adecuada en la lista devuelta (ej. 'CMO_TX_CENTRAL_GEN', 'VW_EESS_UBICACION_GEO', 'CMO_TD_BLOOMBERGDATA', etc.), DEBES llamar a la herramienta `get_detalle_catalogo_datos` pasando su `id_catalogo` para conocer sus columnas reales, tipos de datos y descripciones.\n"
+                f"3. Con los nombres de columnas físicos obtenidos, ejecuta la consulta utilizando la herramienta `query_data` especificando el esquema ('ES_DATGOB_CV' por defecto), la tabla física, su `id_catalogo`, y un diccionario de `filters` clave-valor (ej: `filters: {{\"DEPARTAMENTO\": \"MOQUEGUA\"}}`).\n"
+                f"4. Todo este descubrimiento y consulta debe realizarse de forma 100% autónoma en el primer turno encadenando las herramientas necesarias antes de responder al usuario final.\n"
+                f"5. Después de obtener los datos y presentar tu respuesta en texto libre al usuario, DEBES incluir obligatoriamente al final de tu mensaje el bloque de código Markdown marcado con la etiqueta `json-osam`.\n"
+                f"Este bloque JSON es el que lee la interfaz de usuario de React para poder activar la visualización interactiva de pestañas 'Tabla' y 'Gráfico' juntas. El formato del bloque DEBE ser exactamente este:\n"
                 f"```json-osam\n"
                 f"{{\n"
-                f"  \"report\": {{ ... }},\n"
+                f"  \"report\": {{\n"
+                f"    \"columns\": [\n"
+                f"      {{\"id\": \"FE_FECHA\", \"name\": \"Fecha\", \"type\": \"DATE\"}},\n"
+                f"      {{\"id\": \"CO_IDENTIFIER\", \"name\": \"Identificador\", \"type\": \"VARCHAR2\"}},\n"
+                f"      {{\"id\": \"NU_PX_LAST\", \"name\": \"Último Valor\", \"type\": \"NUMBER\"}}\n"
+                f"    ],\n"
+                f"    \"data\": [\n"
+                f"      {{\"FE_FECHA\": \"2026-04-16\", \"CO_IDENTIFIER\": \"SI1 COMDTY\", \"NU_PX_LAST\": 78.71}}\n"
+                f"    ],\n"
+                f"    \"presentation\": {{\n"
+                f"      \"chart\": {{\n"
+                f"        \"type\": \"line\",\n"
+                f"        \"x\": \"FE_FECHA\",\n"
+                f"        \"y\": \"NU_PX_LAST\"\n"
+                f"      }},\n"
+                f"      \"default_view\": \"table\"\n"
+                f"    }}\n"
+                f"  }},\n"
                 f"  \"analysis\": {{\n"
                 f"    \"insights\": [\n"
-                f"      {{ \"type\": \"trend\", \"text\": \"La demanda aumentó un 10%...\" }}\n"
+                f"      {{\"type\": \"trend\", \"text\": \"Escribe aquí una conclusión relevante sobre los datos...\"}}\n"
                 f"    ]\n"
                 f"  }}\n"
                 f"}}\n"
                 f"```\n"
+                f"Asegúrate de reemplazar 'columns', 'data', 'x', e 'y' con las columnas reales que te devolvieron las herramientas. NUNCA inventes columnas ni datos."
             )
             system_msg = dict(injected_messages[0])
             system_msg["content"] = system_msg["content"] + filtros_context
@@ -401,24 +395,22 @@ async def stream_llm_response(messages, tools=None):
         base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
         env_models = os.getenv("GEMINI_MODEL")
         if env_models:
-            # Elegir el primer modelo disponible (ej: gemini-2.5-flash)
-            model = [m.strip() for m in env_models.split(",") if m.strip()][0]
+            # Extraer lista completa de modelos configurados
+            model_list = [m.strip() for m in env_models.split(",") if m.strip()]
         else:
-            model = "gemini-2.5-flash"
+            model_list = ["gemini-2.5-flash"]
         provider_name = "Google AI Studio (Gemini)"
     elif llm_key and llm_key.startswith("sk-or-"):
         api_key = llm_key
         base_url = "https://openrouter.ai/api/v1"
-        model = "google/gemini-2.5-flash"
+        model_list = ["google/gemini-2.5-flash"]
         provider_name = "OpenRouter"
     else:
         # Fallback si no hay claves válidas configuradas
         api_key = llm_key or gemini_key
         base_url = "https://openrouter.ai/api/v1"
-        model = "google/gemini-2.5-flash"
+        model_list = ["google/gemini-2.5-flash"]
         provider_name = "OpenRouter"
-
-    print(f"[BACKEND] Utilizando modelo oficial {model!r} a través de {provider_name}")
 
     # max_retries=0 desactiva los reintentos automáticos internos de la librería openai
     client = openai.AsyncOpenAI(
@@ -427,43 +419,62 @@ async def stream_llm_response(messages, tools=None):
         max_retries=0
     )
     
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            if attempt > 0:
-                await asyncio.sleep(4)
-                
-            kwargs = {
-                "model": model,
-                "messages": injected_messages,
-                "stream": True,
-                "stream_options": {"include_usage": True}
-            }
-            if tools:
-                kwargs["tools"] = tools
-                kwargs["parallel_tool_calls"] = False
-                
+    last_exception = None
+    
+    # Bucle principal de rotación de modelos
+    for model in model_list:
+        print(f"[BACKEND] Intentando conectar con modelo {model!r} a través de {provider_name}...")
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                stream = await client.chat.completions.create(**kwargs)
-            except Exception as inner_e:
-                print(f"[BACKEND DEBUG] Falló completions para {model}. Error: {inner_e}")
-                if "stream_options" in kwargs:
-                    del kwargs["stream_options"]
-                    try:
-                        stream = await client.chat.completions.create(**kwargs)
-                    except Exception as inner_e2:
-                        print(f"[BACKEND DEBUG] Reintento sin stream_options también falló para {model}: {inner_e2}")
-                        raise inner_e2
-                else:
-                    raise inner_e
+                if attempt > 0:
+                    # Backoff exponencial progresivo ante reintentos
+                    backoff_delay = attempt * 3
+                    print(f"[BACKEND WARNING] Esperando {backoff_delay}s antes del reintento {attempt+1}/{max_retries}...")
+                    await asyncio.sleep(backoff_delay)
                     
-            return stream, model
-        except Exception as e:
-            is_rate_limit = "429" in str(e) or "rate" in str(e).lower()
-            if is_rate_limit and attempt < max_retries - 1:
-                print(f"[BACKEND WARNING] Rate limit (429) detectado. Reintentando ({attempt+1}/{max_retries})...")
-                continue
-            raise e
+                kwargs = {
+                    "model": model,
+                    "messages": injected_messages,
+                    "stream": True,
+                    "stream_options": {"include_usage": True}
+                }
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["parallel_tool_calls"] = False
+                    
+                try:
+                    stream = await client.chat.completions.create(**kwargs)
+                except Exception as inner_e:
+                    print(f"[BACKEND DEBUG] Falló completions para {model}. Error: {inner_e}")
+                    if "stream_options" in kwargs:
+                        del kwargs["stream_options"]
+                        try:
+                            stream = await client.chat.completions.create(**kwargs)
+                        except Exception as inner_e2:
+                            print(f"[BACKEND DEBUG] Reintento sin stream_options también falló para {model}: {inner_e2}")
+                            raise inner_e2
+                    else:
+                        raise inner_e
+                        
+                # Si llegamos aquí, la llamada fue exitosa
+                return stream, model
+                
+            except Exception as e:
+                last_exception = e
+                # Verificar si es un error transitorio de red, cuota o sobrecarga (429, 503, 500)
+                is_transient = any(code in str(e) for code in ["429", "503", "500"]) or "rate" in str(e).lower() or "overloaded" in str(e).lower() or "unavailable" in str(e).lower()
+                
+                if is_transient and attempt < max_retries - 1:
+                    print(f"[BACKEND WARNING] Error transitorio detectado en {model}: {e}. Reintentando...")
+                    continue
+                else:
+                    print(f"[BACKEND WARNING] Fallo definitivo para el modelo {model}: {e}.")
+                    # Rompe el bucle de reintentos actual y pasa al siguiente modelo de respaldo
+                    break
+                    
+    # Si todos los modelos de la lista fallaron
+    raise RuntimeError(f"Todos los modelos de la lista fallaron. Último error: {last_exception}")
 
 # ----------------- Generador Automático de Gráficos -----------------
 
@@ -846,76 +857,9 @@ async def start():
             }
         }
         
-        local_osam_tool = {
-            "type": "function",
-            "function": {
-                "name": "query_data_osam",
-                "description": "Herramienta analítica centralizada. Ejecuta consultas analíticas gobernadas en la base de datos a partir de una intención semántica estructurada (OSAM Query) y define su presentación abstracta. Úsela siempre que el usuario le pida datos, métricas, comparaciones o tendencias sobre generación, demanda o estaciones de servicio.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "object",
-                            "properties": {
-                                "fields": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "name": {"type": "string", "description": "Nombre físico de la columna a consultar (ej: POTENCIA_MW, DEMANDA_MAX_MW, GENERACION_GWH, NO_ESTACION)."},
-                                            "aggregation": {"type": "string", "enum": ["SUM", "AVG", "MAX", "MIN", "COUNT", "NONE"], "description": "Función de agregación SQL a aplicar."}
-                                        },
-                                        "required": ["name", "aggregation"]
-                                    },
-                                    "description": "Lista de campos numéricos a agregar o columnas a seleccionar con su función de agregación."
-                                },
-                                "dimensions": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Lista de columnas físicas para agrupar (ej: DEPARTAMENTO, TECNOLOGIA, FECHA, PROVINCIA, DISTRITO)."
-                                },
-                                "filters": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "field": {"type": "string", "description": "Columna física a filtrar (ej: DEPARTAMENTO, TECNOLOGIA, ESTADO, FECHA)."},
-                                            "operator": {"type": "string", "enum": ["equals", "in", "greater_than", "less_than"]},
-                                            "value": {"description": "Valor del filtro. Si el operador es 'in', debe ser un array de valores. Puede ser string o número."}
-                                        },
-                                        "required": ["field", "operator", "value"]
-                                    },
-                                    "description": "Filtros lógicos aplicados."
-                                }
-                            },
-                            "required": ["fields"]
-                        },
-                        "presentation": {
-                            "type": "object",
-                            "properties": {
-                                "chart": {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {"type": "string", "enum": ["line", "bar", "scatter", "pie", "none"], "description": "Tipo de gráfico abstracto deseado."},
-                                        "x": {"type": "string", "description": "Campo a mapear en el eje X (generalmente la dimensión temporal o nominal principal)."},
-                                        "y": {"type": "string", "description": "Campo a mapear en el eje Y (medida cuantitativa principal)."},
-                                        "series": {"type": "string", "description": "Campo opcional para segmentar por series de color (ej: departamento, tecnologia)."}
-                                    },
-                                    "required": ["type"]
-                                }
-                            },
-                            "description": "Especificación de presentación abstracta para los gráficos."
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        }
-        
         if openai_tools is None:
             openai_tools = []
         openai_tools.append(local_chart_tool)
-        openai_tools.append(local_osam_tool)
         cl.user_session.set("openai_tools", openai_tools)
         
         if len(openai_tools) > 1:
@@ -1218,112 +1162,6 @@ async def main(message: cl.Message):
                         else:
                             step.output = f"Error generando gráfico: {message_text}"
                             result = {"status": "error", "message": message_text}
-                elif name == "query_data_osam":
-                    async with cl.Step(name="Procesando Consulta Semántica OSAM", type="tool") as step:
-                        step.input = args
-                        
-                        # Obtener geografía y rol de la sesión de usuario
-                        filtros_activos = cl.user_session.get("filtros_activos") or {}
-                        user_geography = filtros_activos.get("ubicacion", "Sede Nacional")
-                        
-                        user_session = cl.user_session.get("user")
-                        user_role = "Analista"
-                        if user_session and hasattr(user_session, "metadata") and isinstance(user_session.metadata, dict):
-                            user_role = user_session.metadata.get("rol", "Analista")
-                            
-                        # Extraer query y presentation
-                        query_dict = args.get("query", {})
-                        presentation_dict = args.get("presentation") or {}
-                        if not isinstance(presentation_dict, dict):
-                            presentation_dict = {}
-                            
-                        # Fallback inteligente si presentation no está configurada o no tiene chart
-                        chart_spec = presentation_dict.get("chart") or {}
-                        chart_type = chart_spec.get("type", "none")
-                        
-                        # Detectar si el usuario pidió explícitamente un gráfico en el mensaje
-                        user_msg = cl.user_session.get("last_user_message", "")
-                        clean_user_msg = normalize_text(user_msg)
-                        chart_keywords = ["grafic", "tendencia", "curva", "evolucion", "plot", "gráfico", "grafique", "evolución", "barras", "lineas", "torta", "pie", "barra", "dispersión", "puntos"]
-                        wants_chart = (chart_type != "none") or any(kw in clean_user_msg for kw in chart_keywords)
-                        
-                        # Si la consulta tiene dimensiones y campos numéricos, SIEMPRE habilitamos la opción de gráfico
-                        dims = query_dict.get("dimensions", [])
-                        fields = query_dict.get("fields", [])
-                        
-                        if len(dims) > 0 and len(fields) > 0:
-                            if chart_type == "none":
-                                inferred_x = dims[0]
-                                inferred_y = fields[0]["name"]
-                                inferred_type = "line"
-                                if any(t in inferred_x.lower() for t in ["fecha", "date", "ano", "mes", "dia", "periodo"]):
-                                    inferred_type = "line"
-                                else:
-                                    inferred_type = "bar"
-                                
-                                presentation_dict["chart"] = {
-                                    "type": inferred_type,
-                                    "x": inferred_x,
-                                    "y": inferred_y,
-                                    "series": dims[1] if len(dims) > 1 else None
-                                }
-                            else:
-                                if not chart_spec.get("x"):
-                                    chart_spec["x"] = dims[0]
-                                if not chart_spec.get("y"):
-                                    chart_spec["y"] = fields[0]["name"]
-                                presentation_dict["chart"] = chart_spec
-                                
-                            # Configurar la vista inicial predeterminada en base a la intención del usuario
-                            presentation_dict["default_view"] = "chart" if wants_chart else "table"
-                        else:
-                            # Si no se puede graficar, forzar vista de tabla y desactivar gráfico
-                            presentation_dict["chart"] = {"type": "none"}
-                            presentation_dict["default_view"] = "table"
-                        
-                        # Ejecutar la consulta en el OSAM Gateway ( DuckDB + RLS )
-                        print(f"[OSAM GATEWAY] Executing OSAM Query translation and database fetching...")
-                        result = execute_osam_query(query_dict, user_role, user_geography)
-                        
-                        if result.get("status") == "success":
-                            # Inyectar presentation al bloque report de OSAM v1
-                            result["report"]["presentation"] = presentation_dict
-                            
-                            # Extraer nombres de campos para la metadata de la intención
-                            field_names = [f["name"] for f in query_dict.get("fields", [])]
-                            
-                            result["report"]["intent"] = {
-                                "goal": "compare" if len(query_dict.get("filters", [])) > 1 or "IN" in str(query_dict) else "query",
-                                "entities": field_names + query_dict.get("dimensions", []),
-                                "measure": field_names[0] if field_names else None,
-                                "time_grain": "day" if any("fecha" in str(d).lower() for d in query_dict.get("dimensions", [])) else "none",
-                                "confidence": 0.98
-                            }
-                            
-                            # Guardar en sesión de Chainlit para inyección o referencia posterior
-                            cl.user_session.set("last_osam_payload", result)
-                            
-                            # Loguear la generación exitosa de componentes
-                            print(f"[COMPONENT GENERATION] === SUCCESS: OSAM Query executed successfully ===")
-                            db_rows = len(result["report"]["data"])
-                            print(f"[COMPONENT GENERATION] --- Data rows fetched from DuckDB: {db_rows}")
-                            
-                            chart_conf = presentation_dict.get("chart") or {}
-                            chart_t = chart_conf.get("type", "none")
-                            has_chart_comp = (chart_t != "none")
-                            
-                            print(f"[COMPONENT GENERATION] --- Components status:")
-                            print(f"  - Table Component: GENERATED (Columns count: {len(result['report']['columns'])})")
-                            print(f"  - Chart Component: {'GENERATED' if has_chart_comp else 'OMITTED'} (Type: {chart_t}, X: {chart_conf.get('x', 'N/A')}, Y: {chart_conf.get('y', 'N/A')})")
-                            print(f"  - Provenance/Trazabilidad Component: GENERATED (Query Hash: {result['report']['provenance']['query_hash']})")
-                            
-                            step.output = f"✅ Consulta ejecutada con éxito en DuckDB.\n" \
-                                          f"- Registros recuperados: {len(result['report']['data'])}\n" \
-                                          f"- Hash de Consulta: {result['report']['provenance']['query_hash']}\n" \
-                                          f"- RLS Autorizado para geografía: {user_geography}"
-                        else:
-                            print(f"[COMPONENT GENERATION] --- FAILED: query_data_osam execution returned error: {result.get('message')}")
-                            step.output = f"❌ Error ejecutando consulta OSAM: {result.get('message')}"
                 else:
                     # Crear un paso de ejecución en la UI de Chainlit para feedback al usuario
                     async with cl.Step(name=f"Ejecutando: {name}", type="tool") as step:
@@ -1335,6 +1173,56 @@ async def main(message: cl.Message):
                             if name == "get_catalogo_datos":
                                 catalogo_consultado_en_este_turno = True
                             print(f"[BACKEND] Tool {name!r} returned output of length: {len(str(result))} (sample: {str(result)[:200]}...)")
+                            
+                            # Si es consulta de datos, construir compatibilidad con OSAM v1 para renderizar el componente dual (tabla/grafico) de la intranet
+                            if name in ["query_data", "get_unidades", "get_unidades_por_ubigeo", "get_precios_combustible"] and isinstance(result, list) and len(result) > 0:
+                                try:
+                                    df = pd.DataFrame(result)
+                                    osam_columns = []
+                                    for col in df.columns:
+                                        col_type = "NUMBER" if pd.api.types.is_numeric_dtype(df[col]) else "VARCHAR2"
+                                        col_friendly = col.replace("NO_", "").replace("CO_", "").replace("DE_", "").replace("NU_", "").replace("FE_", "").replace("_", " ").title()
+                                        osam_columns.append({
+                                            "id": col,
+                                            "name": col_friendly,
+                                            "type": col_type
+                                        })
+                                    
+                                    x_col = df.columns[0]
+                                    y_col = df.columns[-1]
+                                    for col in df.columns:
+                                        if any(k in col.lower() for k in ["fecha", "date", "periodo", "anio"]):
+                                            x_col = col
+                                            break
+                                    for col in df.columns:
+                                        if col != x_col and pd.api.types.is_numeric_dtype(df[col]):
+                                            y_col = col
+                                            break
+                                            
+                                    chart_type = "line" if any(k in x_col.lower() for k in ["fecha", "date", "periodo", "anio"]) else "bar"
+                                    
+                                    report_payload = {
+                                        "status": "success",
+                                        "report": {
+                                            "columns": osam_columns,
+                                            "data": result,
+                                            "presentation": {
+                                                "chart": {
+                                                    "type": chart_type,
+                                                    "x": x_col,
+                                                    "y": y_col
+                                                },
+                                                "default_view": "table"
+                                            },
+                                            "provenance": {
+                                                "query_hash": f"mcp_query_{name}"
+                                            }
+                                        }
+                                    }
+                                    cl.user_session.set("last_osam_payload", report_payload)
+                                    print(f"[BACKEND] Guardado payload de compatibilidad OSAM para {name}")
+                                except Exception as payload_err:
+                                    print(f"[BACKEND WARNING] No se pudo generar payload de compatibilidad OSAM: {payload_err}")
                             
                             # Mostrar resultados en la UI
                             if isinstance(result, list):
