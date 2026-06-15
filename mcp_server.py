@@ -1,5 +1,7 @@
 # mcp_server.py
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import sys
 import json
 import logging
